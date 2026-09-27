@@ -10,9 +10,9 @@ from __future__ import annotations
 import math
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
-from itertools import pairwise
 
 import mido
 
