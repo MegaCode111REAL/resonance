@@ -200,10 +200,30 @@ function showResult(text) {
   result.textContent = text;
 }
 
+async function resampleAudioBuffer(source, sampleRate) {
+  if (source.sampleRate === sampleRate) return source;
+
+  const frameCount = Math.ceil(source.duration * sampleRate);
+  const offlineContext = new OfflineAudioContext(
+    source.numberOfChannels,
+    frameCount,
+    sampleRate
+  );
+  const bufferSource = offlineContext.createBufferSource();
+  bufferSource.buffer = source;
+  bufferSource.connect(offlineContext.destination);
+  bufferSource.start(0);
+
+  return offlineContext.startRendering();
+}
+
 async function transcribeAudio(file) {
   setProgress(5, "Decoding audio locally…");
   const audioContext = new AudioContext();
-  const audioBuffer = await audioContext.decodeAudioData(await file.arrayBuffer());
+  const decodedAudio = await audioContext.decodeAudioData(await file.arrayBuffer());
+
+  setProgress(12, "Resampling audio to 22050 Hz…");
+  const audioBuffer = await resampleAudioBuffer(decodedAudio, 22050);
   const modelUrl = "https://unpkg.com/@spotify/basic-pitch@1.0.1/model/model.json";
   const basicPitch = new BasicPitch(modelUrl);
 
