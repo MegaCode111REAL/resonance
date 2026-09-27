@@ -12,7 +12,7 @@
       <div>
         <p class="eyebrow">RESONANCE</p>
         <h1>Audio → Music</h1>
-        <p class="subtitle">Turn a recording into notes, then arrange those notes for the instruments you choose.</p>
+        <p class="subtitle">Separate a recording into musical stems, transcribe the pitched parts, then arrange the music for the instruments you choose.</p>
       </div>
       <span id="status" class="status">Ready</span>
     </header>
@@ -80,14 +80,15 @@
         </div>
       </div>
       <div id="stats" class="stats"></div>
+      <div id="stems" class="stems"></div>
       <div id="notes-preview" class="notes-preview"></div>
     </section>
 
     <section class="privacy">
       <strong>Local processing</strong>
-      <span>Your audio is decoded and transcribed in this browser. It is not uploaded by Resonance.</span>
+      <span>Your audio is decoded, separated and transcribed in this browser. Resonance does not upload the recording.</span>
     </section>
   </main>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=4"></script>
 </body>
 </html>
