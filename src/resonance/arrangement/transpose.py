@@ -68,7 +68,7 @@ def choose_best_transposition(
 
     instrument = get_instrument(instrument_name) if instrument_name else None
     candidates = []
-    for shift in range(-11, 12):
+    for shift in range(-6, 6):
         out_of_midi, out_of_range, black_keys = _score_shift(pitches, shift, instrument)
         candidates.append(
             (
