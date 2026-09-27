@@ -200,30 +200,32 @@ function showResult(text) {
   result.textContent = text;
 }
 
-async function resampleAudioBuffer(source, sampleRate) {
-  if (source.sampleRate === sampleRate) return source;
+async function resampleToMono22050(source) {
+  const targetSampleRate = 22050;
 
-  const frameCount = Math.ceil(source.duration * sampleRate);
-  const offlineContext = new OfflineAudioContext(
-    source.numberOfChannels,
-    frameCount,
-    sampleRate
-  );
+  if (source.sampleRate === targetSampleRate && source.numberOfChannels === 1) {
+    return source.getChannelData(0);
+  }
+
+  const frameCount = Math.ceil(source.duration * targetSampleRate);
+  const offlineContext = new OfflineAudioContext(1, frameCount, targetSampleRate);
   const bufferSource = offlineContext.createBufferSource();
   bufferSource.buffer = source;
   bufferSource.connect(offlineContext.destination);
   bufferSource.start(0);
 
-  return offlineContext.startRendering();
+  const rendered = await offlineContext.startRendering();
+  return rendered.getChannelData(0);
 }
 
 async function transcribeAudio(file) {
   setProgress(5, "Decoding audio locally…");
   const audioContext = new AudioContext();
   const decodedAudio = await audioContext.decodeAudioData(await file.arrayBuffer());
+  const originalDuration = decodedAudio.duration;
 
-  setProgress(12, "Resampling audio to 22050 Hz…");
-  const audioBuffer = await resampleAudioBuffer(decodedAudio, 22050);
+  setProgress(12, "Resampling and down-mixing to 22050 Hz mono…");
+  const audioData = await resampleToMono22050(decodedAudio);
   const modelUrl = "https://unpkg.com/@spotify/basic-pitch@1.0.1/model/model.json";
   const basicPitch = new BasicPitch(modelUrl);
 
@@ -233,7 +235,7 @@ async function transcribeAudio(file) {
 
   setProgress(18, "Loading transcription model…");
   await basicPitch.evaluateModel(
-    audioBuffer,
+    audioData,
     (frameChunk, onsetChunk, contourChunk) => {
       for (const row of frameChunk) frames.push(row);
       for (const row of onsetChunk) onsets.push(row);
@@ -255,7 +257,7 @@ async function transcribeAudio(file) {
   await audioContext.close();
   if (!notes.length) throw new Error("The transcription model found no pitched notes in this recording.");
 
-  return { notes, duration: audioBuffer.duration };
+  return { notes, duration: originalDuration };
 }
 
 async function handleAudio(file) {
