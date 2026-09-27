@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resonance-music"
+version = "0.1.0"
+description = "Local AI system for music transcription and target-instrument MIDI arrangement."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+authors = [
+    { name = "MegaCode111REAL" }
+]
+dependencies = [
+    "basic-pitch>=0.4.0",
+    "mido>=1.3.3",
+    "numpy>=1.26,<3",
+    "pretty-midi>=0.2.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.9",
+]
+
+[project.scripts]
+resonance = "resonance.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
