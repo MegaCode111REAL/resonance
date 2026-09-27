@@ -226,7 +226,7 @@ async function transcribeAudio(file) {
   const noteEvents = outputToNotesPoly(frames, onsets, 0.25, 0.25, 5);
   const withBends = addPitchBendsToNoteEvents(contours, noteEvents);
   const notes = noteFramesToTime(withBends).map(note => ({
-    midi: Math.max(0, Math.min(127, Math.round(note.pitchMIDI))),
+    midi: Math.max(0, Math.min(127, Math.round(note.pitchMidi))),
     time: note.startTimeSeconds,
     duration: Math.max(0.05, note.durationSeconds),
     velocity: Math.max(0.08, Math.min(1, note.amplitude ?? 0.75))
