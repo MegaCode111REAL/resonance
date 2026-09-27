@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from .analysis import analyze_midi
 from .arrangement.baseline import arrange
+from .arrangement.transpose import auto_transpose_midi
 from .pipeline import run
 from .transcription.basic_pitch import transcribe
 
@@ -17,8 +18,10 @@ def build_parser():
     p.add_argument("midi",type=Path); p.add_argument("--output","-o",type=Path)
     p=subparsers.add_parser("arrange",help="Arrange MIDI for a target instrument.")
     p.add_argument("midi",type=Path); p.add_argument("--instrument","-i",required=True); p.add_argument("--parts","-p",type=int,default=1); p.add_argument("--output","-o",type=Path,required=True)
+    p.add_argument("--auto-transpose",action="store_true",help="After arranging, choose the chromatic key with the fewest black-key piano notes.")
     p=subparsers.add_parser("run",help="Transcribe audio and arrange it.")
     p.add_argument("audio",type=Path); p.add_argument("--instrument","-i",required=True); p.add_argument("--parts","-p",type=int,default=1); p.add_argument("--output","-o",type=Path,required=True)
+    p.add_argument("--auto-transpose",action="store_true",help="After arranging, choose the chromatic key with the fewest black-key piano notes.")
     return parser
 
 def main():
@@ -35,8 +38,14 @@ def main():
         print(text); return
     elif args.command=="arrange":
         result=arrange(args.midi,args.output,args.instrument,args.parts)
+        if args.auto_transpose:
+            result_info=auto_transpose_midi(result,result,args.instrument)
+            print(f"Auto-transposed: {result_info.key} ({result_info.semitones:+d} semitones), {result_info.black_key_notes}/{result_info.total_notes} black-key notes")
     elif args.command=="run":
         result=run(args.audio,args.output,args.instrument,args.parts)
+        if args.auto_transpose:
+            result_info=auto_transpose_midi(result,result,args.instrument)
+            print(f"Auto-transposed: {result_info.key} ({result_info.semitones:+d} semitones), {result_info.black_key_notes}/{result_info.total_notes} black-key notes")
     else:
         raise RuntimeError("Unknown command")
     print(f"Created: {result}")
