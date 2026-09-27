@@ -1,0 +1,14 @@
+:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#090b10;color:#f4f6fb}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#1a2030 0,#090b10 42rem)}
+.app{width:min(900px,calc(100% - 32px));margin:0 auto;padding:64px 0}
+header,.panel-heading,.actions{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.eyebrow{margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:.16em;opacity:.55}
+h1,h2,p{margin-top:0}h1{margin-bottom:8px;font-size:clamp(36px,7vw,64px);line-height:.95}h2{margin-bottom:0}
+.subtitle,.explanation{color:#aeb5c4}.status,.score{padding:9px 12px;border:1px solid #2b3140;border-radius:999px;color:#c9cfdb;white-space:nowrap}
+.card{margin-top:24px;padding:24px;border:1px solid #242a36;border-radius:20px;background:rgba(18,22,30,.8);box-shadow:0 20px 60px rgba(0,0,0,.22)}
+.dropzone{min-height:180px;display:grid;place-items:center;align-content:center;gap:8px;border:1px dashed #485164;border-radius:14px;cursor:pointer;text-align:center}
+.dropzone span{color:#8e97aa;font-size:14px}.dropzone input{display:none}
+button{border:1px solid #343b4a;border-radius:11px;padding:12px 16px;background:#171c25;color:#f4f6fb;font:inherit;font-weight:700;cursor:pointer}
+button:hover:not(:disabled){border-color:#657089}button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:#f4f6fb;color:#0a0c11;border-color:#f4f6fb}.result{margin-top:18px;padding:15px;border-radius:12px;background:#10151e;color:#cbd2df}.hidden{display:none}
+@media(max-width:650px){.app{padding:32px 0}header,.panel-heading,.actions{align-items:stretch;flex-direction:column}.status,.score{align-self:flex-start}.actions button{width:100%}}
