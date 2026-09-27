@@ -263,6 +263,71 @@ async function resampleStereo44100(decodedAudio) {
   };
 }
 
+const DEMUCS_CACHE_NAME = "resonance-models-v1";
+const DEMUCS_MODEL_URL = DEMUCS_CONSTANTS.DEFAULT_MODEL_URL;
+
+async function loadCachedDemucsModel() {
+  const cache = await caches.open(DEMUCS_CACHE_NAME);
+  const cached = await cache.match(DEMUCS_MODEL_URL);
+
+  if (cached) {
+    const size = Number(cached.headers.get("content-length")) || 0;
+    setProgress(35, size ? "Loading cached separation model… " + (size / 1048576).toFixed(0) + " MB" : "Loading cached separation model…");
+    return cached.arrayBuffer();
+  }
+
+  setProgress(1, "Downloading separation model…");
+  const response = await fetch(DEMUCS_MODEL_URL, { cache: "reload" });
+
+  if (!response.ok) {
+    throw new Error("Could not download the Demucs separation model (" + response.status + ").");
+  }
+
+  const total = Number(response.headers.get("content-length")) || 0;
+  const reader = response.body?.getReader();
+
+  if (!reader) {
+    const buffer = await response.arrayBuffer();
+    await cache.put(DEMUCS_MODEL_URL, new Response(buffer, {
+      headers: { "content-type": "application/octet-stream" }
+    }));
+    setProgress(35, "Separation model cached");
+    return buffer;
+  }
+
+  const chunks = [];
+  let loaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+
+    const percent = total ? loaded / total : 0;
+    const loadedMB = (loaded / 1048576).toFixed(0);
+    const totalMB = total ? (total / 1048576).toFixed(0) : "?";
+    setProgress(percent * 35, "Downloading separation model… " + loadedMB + " / " + totalMB + " MB");
+  }
+
+  const buffer = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  await cache.put(DEMUCS_MODEL_URL, new Response(buffer, {
+    headers: {
+      "content-type": response.headers.get("content-type") || "application/octet-stream",
+      "content-length": String(buffer.byteLength)
+    }
+  }));
+
+  setProgress(35, "Separation model cached");
+  return buffer.buffer;
+}
+
 async function getDemucsProcessor() {
   if (demucsProcessor) return demucsProcessor;
 
@@ -277,18 +342,13 @@ async function getDemucsProcessor() {
     },
     onProgress: ({ progress: value, currentSegment, totalSegments }) => {
       const percent = Math.round(value * 100);
-      setProgress(10 + percent * 0.35, "Separating stems… " + percent + "% (" + currentSegment + "/" + totalSegments + ")");
+      setProgress(35 + percent * 0.35, "Separating stems… " + percent + "% (" + currentSegment + "/" + totalSegments + ")");
     },
-    onLog: (phase, message) => console.debug("[Resonance Demucs]", phase, message),
-    onDownloadProgress: (loaded, total) => {
-      const percent = total ? loaded / total : 0;
-      const loadedMB = (loaded / 1048576).toFixed(0);
-      const totalMB = total ? (total / 1048576).toFixed(0) : "?";
-      setProgress(2 + percent * 8, "Downloading separation model… " + loadedMB + " / " + totalMB + " MB");
-    }
+    onLog: (phase, message) => console.debug("[Resonance Demucs]", phase, message)
   });
 
-  await demucsProcessor.loadModel(DEMUCS_CONSTANTS.DEFAULT_MODEL_URL);
+  const model = await loadCachedDemucsModel();
+  await demucsProcessor.loadModel(model);
   return demucsProcessor;
 }
 
@@ -359,13 +419,14 @@ async function transcribeAudio(file) {
   setProgress(10, "Separating vocals, bass, drums and other instruments…");
   const separated = await demucs.separate(stereo.left, stereo.right);
 
+  setProgress(37, "Loading note transcription model…");
   const basicPitch = await getBasicPitchModel();
   const notes = [];
   const stemCounts = { vocals: 0, bass: 0, other: 0, drums: 0 };
 
   for (let index = 0; index < PITCHED_STEMS.length; index++) {
     const stemName = PITCHED_STEMS[index];
-    const start = 45 + index * 17;
+    const start = 42 + index * 17;
     setProgress(start, "Transcribing " + stemName + " stem…");
 
     const stemNotes = await transcribeStem(stemName, separated[stemName], originalDuration, basicPitch);
