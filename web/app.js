@@ -1,10 +1,7 @@
 import { Midi } from "https://esm.sh/@tonejs/midi@2.0.28";
-import {
-  BasicPitch,
-  outputToNotesPoly,
-  addPitchBendsToNoteEvents,
-  noteFramesToTime
-} from "https://esm.sh/@spotify/basic-pitch@1.0.1";
+import { BasicPitch, outputToNotesPoly, addPitchBendsToNoteEvents, noteFramesToTime } from "https://esm.sh/@spotify/basic-pitch@1.0.1";
+import * as ort from "https://esm.sh/onnxruntime-web@1.20.1";
+import { DemucsProcessor, CONSTANTS as DEMUCS_CONSTANTS } from "https://esm.sh/demucs-web@1.0.2";
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 const KEY_NAMES = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"];
@@ -22,6 +19,8 @@ const INSTRUMENTS = {
   bass: { name: "Bass", low: 28, high: 55, preferredLow: 31, preferredHigh: 50, program: 33 }
 };
 
+const PITCHED_STEMS = ["vocals", "bass", "other"];
+
 const audioInput = document.querySelector("#audio-file");
 const dropzone = document.querySelector("#dropzone");
 const fileInfo = document.querySelector("#file-info");
@@ -38,6 +37,7 @@ const progressFill = document.querySelector("#progress-fill");
 const progressText = document.querySelector("#progress-text");
 const result = document.querySelector("#result");
 const stats = document.querySelector("#stats");
+const stemsElement = document.querySelector("#stems");
 const notesPreview = document.querySelector("#notes-preview");
 
 let sourceFile = null;
@@ -45,6 +45,8 @@ let transcription = null;
 let arrangedMidi = null;
 let arrangedNotes = [];
 let downloadBytes = null;
+let demucsProcessor = null;
+let basicPitchModel = null;
 
 function setStatus(message) {
   status.textContent = message;
@@ -81,23 +83,37 @@ function noteName(midi) {
   return names[midi % 12] + (Math.floor(midi / 12) - 1);
 }
 
-function renderAnalysis(notes, duration) {
+function renderAnalysis(notes, duration, stemCounts) {
+  if (!notes.length) return;
+
   const pitches = notes.map(n => n.midi);
   const min = Math.min(...pitches);
   const max = Math.max(...pitches);
   const unique = new Set(pitches.map(p => p % 12)).size;
+
   stats.innerHTML = [
     ["Notes", notes.length],
     ["Duration", duration.toFixed(1) + " s"],
     ["Pitch range", noteName(min) + "–" + noteName(max)],
     ["Pitch classes", unique + " / 12"]
-  ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
+  ].map(([label, value]) => "<div><span>" + label + "</span><strong>" + value + "</strong></div>").join("");
+
+  const labels = {
+    vocals: "Vocals",
+    bass: "Bass",
+    other: "Other instruments",
+    drums: "Drums"
+  };
+
+  stemsElement.innerHTML = Object.entries(stemCounts)
+    .map(([stem, count]) => "<div class=\"stem\"><span>" + (labels[stem] || stem) + "</span><strong>" + (count ? count + " notes" : "rhythm only") + "</strong></div>")
+    .join("");
 
   notesPreview.textContent = notes.slice(0, 28).map(n => noteName(n.midi)).join(" · ") + (notes.length > 28 ? " · …" : "");
   analysisPanel.classList.remove("hidden");
 }
 
-function buildArrangement(notes, instrumentName, partCount, duration, tempo = 120) {
+function buildArrangement(notes, instrumentName, partCount, tempo = 120) {
   const instrument = INSTRUMENTS[instrumentName];
   const midi = new Midi();
   midi.header.setTempo(tempo);
@@ -200,6 +216,13 @@ function showResult(text) {
   result.textContent = text;
 }
 
+function mixToMono(left, right) {
+  const length = Math.min(left.length, right.length);
+  const mono = new Float32Array(length);
+  for (let i = 0; i < length; i++) mono[i] = (left[i] + right[i]) * 0.5;
+  return mono;
+}
+
 async function resampleToMono22050(source) {
   const targetSampleRate = 22050;
 
@@ -218,22 +241,86 @@ async function resampleToMono22050(source) {
   return rendered.getChannelData(0);
 }
 
-async function transcribeAudio(file) {
-  setProgress(5, "Decoding audio locally…");
-  const audioContext = new AudioContext();
-  const decodedAudio = await audioContext.decodeAudioData(await file.arrayBuffer());
-  const originalDuration = decodedAudio.duration;
+async function resampleStereo44100(decodedAudio) {
+  if (decodedAudio.sampleRate === 44100) {
+    return {
+      left: decodedAudio.getChannelData(0),
+      right: decodedAudio.numberOfChannels > 1 ? decodedAudio.getChannelData(1) : decodedAudio.getChannelData(0)
+    };
+  }
 
-  setProgress(12, "Resampling and down-mixing to 22050 Hz mono…");
-  const audioData = await resampleToMono22050(decodedAudio);
-  const modelUrl = "https://unpkg.com/@spotify/basic-pitch@1.0.1/model/model.json";
-  const basicPitch = new BasicPitch(modelUrl);
+  const frameCount = Math.ceil(decodedAudio.duration * 44100);
+  const offlineContext = new OfflineAudioContext(2, frameCount, 44100);
+  const source = offlineContext.createBufferSource();
+  source.buffer = decodedAudio;
+  source.connect(offlineContext.destination);
+  source.start(0);
+
+  const rendered = await offlineContext.startRendering();
+  return {
+    left: rendered.getChannelData(0),
+    right: rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : rendered.getChannelData(0)
+  };
+}
+
+async function getDemucsProcessor() {
+  if (demucsProcessor) return demucsProcessor;
+
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.simd = true;
+
+  demucsProcessor = new DemucsProcessor({
+    ort,
+    sessionOptions: {
+      enableCpuMemArena: false,
+      enableMemPattern: false
+    },
+    onProgress: ({ progress: value, currentSegment, totalSegments }) => {
+      const percent = Math.round(value * 100);
+      setProgress(10 + percent * 0.35, "Separating stems… " + percent + "% (" + currentSegment + "/" + totalSegments + ")");
+    },
+    onLog: (phase, message) => console.debug("[Resonance Demucs]", phase, message),
+    onDownloadProgress: (loaded, total) => {
+      const percent = total ? loaded / total : 0;
+      const loadedMB = (loaded / 1048576).toFixed(0);
+      const totalMB = total ? (total / 1048576).toFixed(0) : "?";
+      setProgress(2 + percent * 8, "Downloading separation model… " + loadedMB + " / " + totalMB + " MB");
+    }
+  });
+
+  await demucsProcessor.loadModel(DEMUCS_CONSTANTS.DEFAULT_MODEL_URL);
+  return demucsProcessor;
+}
+
+async function getBasicPitchModel() {
+  if (!basicPitchModel) {
+    setProgress(45, "Loading note transcription model…");
+    basicPitchModel = new BasicPitch("https://unpkg.com/@spotify/basic-pitch@1.0.1/model/model.json");
+  }
+  return basicPitchModel;
+}
+
+async function transcribeStem(stemName, stem, duration, basicPitch) {
+  const mono = mixToMono(stem.left, stem.right);
+
+  const sourceContext = new OfflineAudioContext(1, mono.length, 44100);
+  const sourceBuffer = sourceContext.createBuffer(1, mono.length, 44100);
+  sourceBuffer.copyToChannel(mono, 0);
+
+  const frameCount = Math.ceil(duration * 22050);
+  const targetContext = new OfflineAudioContext(1, frameCount, 22050);
+  const source = targetContext.createBufferSource();
+  source.buffer = sourceBuffer;
+  source.connect(targetContext.destination);
+  source.start(0);
+
+  const rendered = await targetContext.startRendering();
+  const audioData = rendered.getChannelData(0);
 
   const frames = [];
   const onsets = [];
   const contours = [];
 
-  setProgress(18, "Loading transcription model…");
   await basicPitch.evaluateModel(
     audioData,
     (frameChunk, onsetChunk, contourChunk) => {
@@ -241,31 +328,74 @@ async function transcribeAudio(file) {
       for (const row of onsetChunk) onsets.push(row);
       for (const row of contourChunk) contours.push(row);
     },
-    pct => setProgress(20 + pct * 0.58, "Transcribing audio… " + Math.round(pct * 100) + "%")
+    () => {}
   );
 
-  setProgress(82, "Converting model output into notes…");
   const noteEvents = outputToNotesPoly(frames, onsets, 0.25, 0.25, 5);
   const withBends = addPitchBendsToNoteEvents(contours, noteEvents);
-  const notes = noteFramesToTime(withBends).map(note => ({
+
+  return noteFramesToTime(withBends).map(note => ({
     midi: Math.max(0, Math.min(127, Math.round(note.pitchMidi))),
     time: note.startTimeSeconds,
     duration: Math.max(0.05, note.durationSeconds),
-    velocity: Math.max(0.08, Math.min(1, note.amplitude ?? 0.75))
+    velocity: Math.max(0.08, Math.min(1, note.amplitude ?? 0.75)),
+    stem: stemName
   }));
+}
 
-  await audioContext.close();
-  if (!notes.length) throw new Error("The transcription model found no pitched notes in this recording.");
+async function transcribeAudio(file) {
+  setProgress(2, "Decoding audio locally…");
 
-  return { notes, duration: originalDuration };
+  const decodeContext = new AudioContext({ sampleRate: 44100 });
+  const decodedAudio = await decodeContext.decodeAudioData(await file.arrayBuffer());
+  const originalDuration = decodedAudio.duration;
+
+  setProgress(8, "Preparing 44.1 kHz stereo audio…");
+  const stereo = await resampleStereo44100(decodedAudio);
+  await decodeContext.close();
+
+  const demucs = await getDemucsProcessor();
+
+  setProgress(10, "Separating vocals, bass, drums and other instruments…");
+  const separated = await demucs.separate(stereo.left, stereo.right);
+
+  const basicPitch = await getBasicPitchModel();
+  const notes = [];
+  const stemCounts = { vocals: 0, bass: 0, other: 0, drums: 0 };
+
+  for (let index = 0; index < PITCHED_STEMS.length; index++) {
+    const stemName = PITCHED_STEMS[index];
+    const start = 45 + index * 17;
+    setProgress(start, "Transcribing " + stemName + " stem…");
+
+    const stemNotes = await transcribeStem(stemName, separated[stemName], originalDuration, basicPitch);
+    notes.push(...stemNotes);
+    stemCounts[stemName] = stemNotes.length;
+  }
+
+  stemCounts.drums = separated.drums ? 1 : 0;
+  notes.sort((a, b) => a.time - b.time || b.midi - a.midi);
+
+  if (!notes.length) {
+    throw new Error("The separated stems contained no pitched notes that Basic Pitch could transcribe.");
+  }
+
+  return {
+    notes,
+    duration: originalDuration,
+    stemCounts
+  };
 }
 
 async function handleAudio(file) {
   if (!file) return;
+
   sourceFile = file;
   arrangedMidi = null;
   arrangedNotes = [];
   downloadBytes = null;
+  transcription = null;
+
   transposeButton.disabled = true;
   downloadButton.disabled = true;
   arrangeButton.disabled = true;
@@ -274,20 +404,20 @@ async function handleAudio(file) {
   fileInfo.classList.remove("hidden");
   fileInfo.textContent = file.name + " · " + (file.size / 1048576).toFixed(2) + " MB";
   panel.classList.remove("hidden");
-  setStatus("Transcribing…");
+  setStatus("Separating stems…");
 
   try {
     transcription = await transcribeAudio(file);
-    renderAnalysis(transcription.notes, transcription.duration);
+    renderAnalysis(transcription.notes, transcription.duration, transcription.stemCounts);
     arrangeButton.disabled = false;
-    setProgress(100, "Transcription complete");
-    setStatus(transcription.notes.length + " notes found");
-    setTimeout(hideProgress, 700);
+    setProgress(100, "Separation and transcription complete");
+    setStatus(transcription.notes.length + " notes from separated stems");
+    setTimeout(hideProgress, 900);
   } catch (error) {
     console.error(error);
     hideProgress();
-    setStatus("Transcription failed");
-    showResult(error?.message || "The audio could not be transcribed in this browser.");
+    setStatus("Audio analysis failed");
+    showResult(error?.message || "The audio could not be separated or transcribed in this browser.");
   }
 }
 
@@ -308,32 +438,31 @@ dropzone.addEventListener("drop", event => {
 
 arrangeButton.addEventListener("click", async () => {
   if (!transcription) return;
+
   const parts = Math.max(1, Math.min(16, Number(partsInput.value) || 1));
   const instrument = instrumentInput.value;
 
   arrangeButton.disabled = true;
   transposeButton.disabled = true;
-  setProgress(5, "Building musical arrangement…");
+  setProgress(92, "Building musical arrangement…");
 
   await new Promise(requestAnimationFrame);
-  arrangedMidi = buildArrangement(
-    transcription.notes,
-    instrument,
-    parts,
-    transcription.duration
-  );
+
+  arrangedMidi = buildArrangement(transcription.notes, instrument, parts);
   arrangedNotes = getArrangementNotes(arrangedMidi);
+
   setProgress(100, "Arrangement complete");
   setStatus(instrumentName(instrument) + " × " + parts);
   setDownload();
   transposeButton.disabled = arrangedNotes.length === 0;
-  showResult("Created " + parts + " " + INSTRUMENTS[instrument].name + " part" + (parts === 1 ? "" : "s") + " from the transcription.");
+  showResult("Created " + parts + " " + INSTRUMENTS[instrument].name + " part" + (parts === 1 ? "" : "s") + " from the separated transcription.");
   arrangeButton.disabled = false;
   setTimeout(hideProgress, 700);
 });
 
 transposeButton.addEventListener("click", async () => {
   if (!arrangedMidi) return;
+
   transposeButton.disabled = true;
   setProgress(10, "Testing all 12 chromatic transpositions…");
   await new Promise(requestAnimationFrame);
@@ -346,12 +475,14 @@ transposeButton.addEventListener("click", async () => {
 
   const key = KEY_NAMES[((best.shift % 12) + 12) % 12];
   const direction = best.shift === 0 ? "no shift" : (best.shift > 0 ? "+" : "") + best.shift + " semitones";
+
   showResult(
     "Auto Transpose: " + key +
     " · " + direction +
     " · " + best.black + " black-key notes" +
     " · " + best.rangePenalty + " range adjustments"
   );
+
   setProgress(100, "Auto Transpose complete");
   setStatus("Optimized: " + key);
   transposeButton.disabled = false;
@@ -360,13 +491,16 @@ transposeButton.addEventListener("click", async () => {
 
 downloadButton.addEventListener("click", () => {
   if (!downloadBytes) return;
+
   const blob = new Blob([downloadBytes], { type: "audio/midi" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  const base = sourceFile?.name?.replace(/\.[^.]+$/, "") || "resonance";
+
+  const base = sourceFile?.name?.replace(/\\.[^.]+$/, "") || "resonance";
   link.download = base + "-arrangement.mid";
   link.click();
+
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
