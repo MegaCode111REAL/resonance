@@ -7,11 +7,12 @@ models can consume as features or training targets.
 
 from __future__ import annotations
 
+import math
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
-import math
 from typing import Any
+from itertools import pairwise
 
 import mido
 
@@ -114,7 +115,6 @@ def _bar_boundaries(midi: mido.MidiFile, end_tick: int) -> list[int]:
     numerator = 4
     denominator = 4
     changes: list[tuple[int, int, int]] = [(0, numerator, denominator)]
-    absolute = 0
     for track in midi.tracks:
         absolute = 0
         for message in track:
@@ -139,7 +139,7 @@ def _bar_boundaries(midi: mido.MidiFile, end_tick: int) -> list[int]:
 def _chord_name(pitches: list[int]) -> tuple[str, float]:
     if not pitches:
         return "N.C.", 0.0
-    pcs = sorted(set(p % 12 for p in pitches))
+    pcs = sorted({p % 12 for p in pitches})
     best: tuple[float, str] = (0.0, "N.C.")
     templates = {
         "maj": {0, 4, 7}, "min": {0, 3, 7}, "dim": {0, 3, 6},
@@ -160,7 +160,7 @@ def _chord_name(pitches: list[int]) -> tuple[str, float]:
 
 def detect_chords(notes: list[Note], bars: list[int]) -> list[dict[str, Any]]:
     chords: list[dict[str, Any]] = []
-    for index, (start, end) in enumerate(zip(bars, bars[1:])):
+    for index, (start, end) in enumerate(pairwise(bars)):
         pitches = [n.pitch for n in notes if n.start < end and n.end > start]
         name, confidence = _chord_name(pitches)
         chords.append({"bar": index + 1, "start_tick": start, "end_tick": end, "chord": name, "confidence": confidence})
@@ -175,7 +175,6 @@ def extract_melody(notes: list[Note]) -> list[dict[str, Any]]:
         by_start[note.start].append(note)
     for start in sorted(by_start):
         candidates = by_start[start]
-        # Highest sustained pitch is a strong baseline for melody extraction.
         note = max(candidates, key=lambda n: (n.pitch, n.duration, n.velocity))
         if melody and note.pitch == melody[-1]["pitch"] and start <= melody[-1]["end_tick"]:
             melody[-1]["end_tick"] = max(melody[-1]["end_tick"], note.end)
@@ -199,7 +198,7 @@ def _bar_features(notes: list[Note], start: int, end: int) -> tuple[float, float
 def detect_sections(notes: list[Note], bars: list[int]) -> list[Section]:
     if len(bars) <= 1:
         return []
-    features = [_bar_features(notes, a, b) for a, b in zip(bars, bars[1:])]
+    features = [_bar_features(notes, a, b) for a, b in pairwise(bars)]
     sections: list[Section] = []
     start_bar = 0
     previous = features[0]
