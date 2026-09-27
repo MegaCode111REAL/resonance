@@ -30,6 +30,8 @@ The first implementation provides:
 
 - Audio-file validation.
 - Audio → MIDI transcription using Spotify Basic Pitch as the initial transcription backend.
+- An audio-first browser interface: MP3/WAV/FLAC/OGG/M4A/AIFF → local transcription → arrangement → Auto Transpose → MIDI download.
+- Browser-local transcription using Spotify's TypeScript Basic Pitch package; the recording is decoded and processed in the browser rather than uploaded by Resonance.
 - MIDI normalization utilities.
 - A target-instrument model independent of the source instrumentation.
 - A deterministic baseline arranger that redistributes musical material across requested target parts.
@@ -152,6 +154,25 @@ The final arranger will learn from MIDI arrangements and will be conditioned on:
 It will be possible to request instruments that do not exist in the original recording.
 
 ### Browser
+
+The web interface is now audio-first rather than MIDI-first. MIDI remains the internal musical representation and an export format; users normally begin by dropping an audio recording.
+
+The current browser flow is:
+
+~~~text
+MP3 / WAV / FLAC / OGG / M4A / AIFF
+              ↓
+     Browser-local transcription
+              ↓
+        Musical notes
+              ↓
+       Target instruments
+              ↓
+          Arrangement
+              ↓
+       Auto Transpose
+              ↓
+            MIDI
 
 The long-term goal is a completely local web application:
 
