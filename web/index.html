@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Resonance</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div><p class="eyebrow">RESONANCE</p><h1>Arrangement</h1><p class="subtitle">Local MIDI arrangement tools.</p></div>
+      <span id="status" class="status">No arrangement loaded</span>
+    </header>
+    <section class="card">
+      <label class="dropzone" for="midi-file">
+        <input id="midi-file" type="file" accept=".mid,.midi,audio/midi">
+        <strong>Load arranged MIDI</strong><span>Choose the MIDI produced by Resonance.</span>
+      </label>
+    </section>
+    <section id="arrangement-panel" class="card hidden">
+      <div class="panel-heading">
+        <div><p class="eyebrow">POST-ARRANGEMENT</p><h2>Key optimization</h2></div>
+        <span id="score" class="score">—</span>
+      </div>
+      <p class="explanation">Auto Transpose tests all 12 chromatic keys and chooses the version with the fewest notes that land on piano black keys. If several keys tie, it prefers the smallest transposition.</p>
+      <div class="actions">
+        <button id="auto-transpose" class="primary" disabled>Auto Transpose</button>
+        <button id="download" disabled>Download MIDI</button>
+      </div>
+      <div id="result" class="result hidden"></div>
+    </section>
+  </main>
+  <script src="https://unpkg.com/@tonejs/midi"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
