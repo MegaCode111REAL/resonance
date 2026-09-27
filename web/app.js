@@ -30,7 +30,7 @@
 
   function chooseBestShift(notes) {
     const candidates = [];
-    for (let shift = -11; shift <= 11; shift++) {
+    for (let shift = -6; shift < 6; shift++) {
       const scored = scoreShift(notes, shift);
       candidates.push({ shift, ...scored, distance: Math.abs(shift), unchanged: shift === 0 ? 0 : 1 });
     }
