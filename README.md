@@ -1,4 +1,5 @@
 # Resonance
+[![CI](https://github.com/MegaCode111REAL/resonance/actions/workflows/ci.yml/badge.svg)](https://github.com/MegaCode111REAL/resonance/actions/workflows/ci.yml)
 
 Resonance is an open-source AI system for understanding recorded music and creating new MIDI arrangements for user-selected instruments.
 
