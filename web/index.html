@@ -3,35 +3,91 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Resonance</title>
+  <title>Resonance — Audio to Music</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <main class="app">
     <header>
-      <div><p class="eyebrow">RESONANCE</p><h1>Arrangement</h1><p class="subtitle">Local MIDI arrangement tools.</p></div>
-      <span id="status" class="status">No arrangement loaded</span>
+      <div>
+        <p class="eyebrow">RESONANCE</p>
+        <h1>Audio → Music</h1>
+        <p class="subtitle">Turn a recording into notes, then arrange those notes for the instruments you choose.</p>
+      </div>
+      <span id="status" class="status">Ready</span>
     </header>
-    <section class="card">
-      <label class="dropzone" for="midi-file">
-        <input id="midi-file" type="file" accept=".mid,.midi,audio/midi">
-        <strong>Load arranged MIDI</strong><span>Choose the MIDI produced by Resonance.</span>
+
+    <section class="card hero-card">
+      <label id="dropzone" class="dropzone" for="audio-file">
+        <input id="audio-file" type="file" accept=".mp3,.wav,.flac,.ogg,.m4a,.aif,.aiff,audio/*">
+        <span class="upload-icon">♫</span>
+        <strong>Drop an MP3 / WAV here</strong>
+        <span>FLAC, OGG, M4A and AIFF are supported when your browser can decode them.</span>
+        <span class="browse">Choose audio file</span>
       </label>
+      <div id="file-info" class="file-info hidden"></div>
     </section>
+
     <section id="arrangement-panel" class="card hidden">
       <div class="panel-heading">
-        <div><p class="eyebrow">POST-ARRANGEMENT</p><h2>Key optimization</h2></div>
-        <span id="score" class="score">—</span>
+        <div>
+          <p class="eyebrow">ARRANGEMENT</p>
+          <h2>Choose the new ensemble</h2>
+        </div>
       </div>
-      <p class="explanation">Auto Transpose tests all 12 chromatic keys and chooses the version with the fewest notes that land on piano black keys. If several keys tie, it prefers the smallest transposition.</p>
+
+      <div class="controls">
+        <label>
+          <span>Instrument</span>
+          <select id="instrument">
+            <option value="piano">Piano</option>
+            <option value="marimba" selected>Marimba</option>
+            <option value="vibraphone">Vibraphone</option>
+            <option value="xylophone">Xylophone</option>
+            <option value="violin">Violin</option>
+            <option value="cello">Cello</option>
+            <option value="flute">Flute</option>
+            <option value="acoustic-guitar">Acoustic Guitar</option>
+            <option value="electric-guitar">Electric Guitar</option>
+            <option value="bass">Bass</option>
+          </select>
+        </label>
+        <label>
+          <span>Parts</span>
+          <input id="parts" type="number" min="1" max="16" value="4">
+        </label>
+      </div>
+
       <div class="actions">
-        <button id="auto-transpose" class="primary" disabled>Auto Transpose</button>
+        <button id="arrange" class="primary">Arrange</button>
+        <button id="auto-transpose" disabled>Auto Transpose</button>
         <button id="download" disabled>Download MIDI</button>
       </div>
+
+      <div id="progress" class="progress hidden">
+        <div class="progress-track"><div id="progress-fill"></div></div>
+        <span id="progress-text">Working…</span>
+      </div>
+
       <div id="result" class="result hidden"></div>
     </section>
+
+    <section id="analysis-panel" class="card hidden">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">MUSICAL REPRESENTATION</p>
+          <h2>What Resonance found</h2>
+        </div>
+      </div>
+      <div id="stats" class="stats"></div>
+      <div id="notes-preview" class="notes-preview"></div>
+    </section>
+
+    <section class="privacy">
+      <strong>Local processing</strong>
+      <span>Your audio is decoded and transcribed in this browser. It is not uploaded by Resonance.</span>
+    </section>
   </main>
-  <script src="https://unpkg.com/@tonejs/midi"></script>
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
