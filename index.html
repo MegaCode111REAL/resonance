@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Resonance — local AI music transcription and arrangement.">
+  <title>Resonance</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#090b10;color:#f4f6fb}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#1a2030 0,#090b10 42rem)}
+    .app{width:min(960px,calc(100% - 32px));margin:0 auto;padding:56px 0 64px}
+    header{padding:8px 0 30px}
+    .eyebrow{margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:.16em;opacity:.55}
+    h1{margin:0 0 12px;font-size:clamp(48px,9vw,82px);line-height:.9;letter-spacing:-.055em}
+    .subtitle{max-width:720px;margin:0;color:#aeb5c4;font-size:18px;line-height:1.55}
+    .card{margin-top:24px;padding:28px;border:1px solid #242a36;border-radius:20px;background:rgba(18,22,30,.82);box-shadow:0 20px 60px rgba(0,0,0,.22)}
+    .markdown h2{margin:0 0 18px;font-size:28px;letter-spacing:-.025em}
+    .markdown h3{margin:30px 0 12px;font-size:20px}
+    .markdown p,.markdown li{color:#b5bdcc;line-height:1.65}
+    .markdown p{margin:0 0 16px}
+    .markdown ul{padding-left:22px;margin:10px 0 20px}
+    .markdown li{margin:6px 0}
+    .markdown strong{color:#f4f6fb}
+    .markdown code{padding:2px 6px;border:1px solid #303746;border-radius:6px;background:#0d1118;color:#e0e5ee;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}
+    pre{margin:16px 0 24px;padding:18px;overflow:auto;border:1px solid #292f3b;border-radius:12px;background:#0d1118;color:#cbd2df;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
+    hr{border:0;border-top:1px solid #292f3b;margin:30px 0}
+    a{color:#dce2ed}
+    .title-card{padding-bottom:26px}
+    .footer{margin-top:22px;text-align:center;color:#697384;font-size:12px}
+    @media(max-width:650px){.app{padding:32px 0 44px}.card{padding:20px}.markdown h2{font-size:24px}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <p class="eyebrow">RESONANCE</p>
+      <h1>Resonance</h1>
+      <p class="subtitle">Local AI music transcription and arrangement — turning recorded audio into notes, instruments, and MIDI arrangements.</p>
+    </header>
+
+    <article class="card markdown">
+      <p>Resonance is an open-source AI system for understanding recorded music and creating new MIDI arrangements for user-selected instruments.</p>
+
+      <p>The core idea is:</p>
+      <pre>Audio
+  ↓
+Music transcription
+  ↓
+MIDI
+  ↓
+Musical analysis
+  ↓
+Target instrumentation
+  ↓
+Arrangement model
+  ↓
+MIDI</pre>
+
+      <p>The source instruments do <strong>not</strong> constrain the output instruments. A pop song containing vocals, synth, guitar, bass and drums can be transcribed and arranged for four marimbas, even if there is no marimba in the original recording.</p>
+
+      <h2>Current status</h2>
+      <p>Resonance is being built in stages.</p>
+      <p>The first implementation provides:</p>
+      <ul>
+        <li>Audio-file validation.</li>
+        <li>Audio → MIDI transcription using Spotify Basic Pitch as the initial transcription backend.</li>
+        <li>An audio-first browser interface: MP3/WAV/FLAC/OGG/M4A/AIFF → local transcription → arrangement → Auto Transpose → MIDI download.</li>
+        <li>Browser-local transcription using Spotify's TypeScript Basic Pitch package; the recording is decoded and processed in the browser rather than uploaded by Resonance.</li>
+        <li>MIDI normalization utilities.</li>
+        <li>A target-instrument model independent of the source instrumentation.</li>
+        <li>A deterministic baseline arranger that redistributes musical material across requested target parts.</li>
+        <li>MIDI export.</li>
+        <li>A command-line interface.</li>
+        <li>A structure designed so the baseline components can later be replaced by Resonance-trained models.</li>
+        <li>A future browser deployment path using browser-compatible model formats.</li>
+      </ul>
+      <p>The baseline arranger is deliberately <strong>not</strong> the final AI arranger. It exists so that we have a complete, testable pipeline and a reference point for evaluating future learned models.</p>
+
+      <h2>Architecture</h2>
+      <pre>                    AUDIO
+                      │
+                      ▼
+             ┌──────────────────┐
+             │   Transcription  │
+             │  model/backend   │
+             └────────┬─────────┘
+                      │
+                      ▼
+                    MIDI
+                      │
+             ┌────────┴─────────┐
+             │                  │
+             ▼                  ▼
+       MIDI analysis       Source metadata
+             │
+             └────────┬─────────┘
+                      ▼
+             ┌──────────────────┐
+             │ Arrangement      │
+             │ planner/model    │
+             └────────┬─────────┘
+                      │
+                      ▼
+                ARRANGED MIDI
+                      │
+             ┌────────┴─────────┐
+             ▼                  ▼
+          .mid               MusicXML
+                              (planned)</pre>
+
+      <h3>Important design rule</h3>
+      <p>MIDI is the central musical representation. Resonance does <strong>not</strong> use an LLM to generate the notes of an arrangement.</p>
+      <p>An optional language model may eventually translate natural-language requests into structured arrangement settings, but the musical arrangement itself is produced by the arranger.</p>
+
+      <h2>Development</h2>
+      <p>Requirements:</p>
+      <ul>
+        <li>Python 3.11+</li>
+        <li>FFmpeg is recommended for broad audio-format support.</li>
+        <li>A machine with enough memory for the transcription model.</li>
+      </ul>
+      <p>Install the project in editable mode:</p>
+      <pre>python -m pip install -e ".[dev]"</pre>
+      <p>Transcribe an audio file:</p>
+      <pre>resonance transcribe song.wav --output output/song.mid</pre>
+      <p>Create a four-part marimba arrangement:</p>
+      <pre>resonance arrange output/song.mid   --instrument marimba   --parts 4   --output output/marimba-arrangement.mid</pre>
+      <p>Run the complete baseline pipeline:</p>
+      <pre>resonance run song.wav   --instrument marimba   --parts 4   --output output/marimba-arrangement.mid</pre>
+      <p>Run tests:</p>
+      <pre>python -m pytest</pre>
+
+      <h2>Planned model development</h2>
+      <h3>Transcription</h3>
+      <p>The first backend uses Basic Pitch. It is a lightweight automatic music transcription model that can produce MIDI and is explicitly designed to work across instruments. It is a starting point, not the final Resonance transcription model.</p>
+      <p>Future Resonance models will work toward:</p>
+      <ul>
+        <li>instrument identification</li>
+        <li>source-aware multi-instrument transcription</li>
+        <li>better note separation</li>
+        <li>drum-event transcription</li>
+        <li>chord recognition</li>
+        <li>musical section detection</li>
+        <li>vocal melody transcription</li>
+        <li>lyrics transcription</li>
+      </ul>
+
+      <h3>Arrangement</h3>
+      <p>The final arranger will learn from MIDI arrangements and will be conditioned on:</p>
+      <ul>
+        <li>source musical material</li>
+        <li>target instruments</li>
+        <li>target part count</li>
+        <li>instrument ranges</li>
+        <li>ensemble role</li>
+        <li>section</li>
+        <li>musical importance</li>
+        <li>difficulty/playability constraints</li>
+      </ul>
+      <p>It will be possible to request instruments that do not exist in the original recording.</p>
+
+      <h3>Browser</h3>
+      <p>The web interface is now audio-first rather than MIDI-first. MIDI remains the internal musical representation and an export format; users normally begin by dropping an audio recording.</p>
+      <p>The current browser flow is:</p>
+      <pre>MP3 / WAV / FLAC / OGG / M4A / AIFF
+              ↓
+     Browser-local transcription
+              ↓
+        Musical notes
+              ↓
+       Target instruments
+              ↓
+          Arrangement
+              ↓
+       Auto Transpose
+              ↓
+            MIDI</pre>
+      <p>The long-term goal is a completely local web application:</p>
+      <pre>Browser
+  ├── audio processing
+  ├── transcription model
+  ├── MIDI analysis
+  ├── arrangement model
+  └── MIDI / notation export</pre>
+      <p>No server should be required for normal operation.</p>
+
+      <h2>Repository layout</h2>
+      <pre>resonance/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── src/
+│   └── resonance/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── cli.py
+│       ├── instruments.py
+│       ├── midi.py
+│       ├── pipeline.py
+│       ├── analysis/
+│       ├── arrangement/
+│       │   ├── __init__.py
+│       │   └── baseline.py
+│       └── transcription/
+│           ├── __init__.py
+│           └── basic_pitch.py
+├── tests/
+│   ├── test_arrangement.py
+│   ├── test_instruments.py
+│   ├── test_midi.py
+│   └── test_analysis.py
+├── web/
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
+├── .gitignore
+├── pyproject.toml
+└── README.md</pre>
+
+      <h2>License</h2>
+      <p>The Resonance source code is currently distributed under the MIT License. Model weights and third-party models retain their own licenses; see their respective repositories and model cards before redistribution.</p>
+    </article>
+
+    <p class="footer">Resonance · README</p>
+  </main>
+</body>
+</html>
