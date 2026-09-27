@@ -334,6 +334,19 @@ async function getDemucsProcessor() {
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.simd = true;
 
+  const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator;
+  if (hasWebGPU) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) {
+        ort.env.webgpu = { powerPreference: "high-performance" };
+        console.info("[Resonance Demucs] WebGPU adapter detected");
+      }
+    } catch (error) {
+      console.warn("[Resonance Demucs] WebGPU detection failed; using WASM", error);
+    }
+  }
+
   demucsProcessor = new DemucsProcessor({
     ort,
     sessionOptions: {
@@ -348,13 +361,23 @@ async function getDemucsProcessor() {
   });
 
   const model = await loadCachedDemucsModel();
-  await demucsProcessor.loadModel(model);
+  setProgress(36, "Initializing separation model…");
+  console.info("[Resonance Demucs] Loading ONNX model into ONNX Runtime");
+  const started = performance.now();
+  try {
+    await demucsProcessor.loadModel(model);
+  } catch (error) {
+    console.error("[Resonance Demucs] Model initialization failed", error);
+    throw new Error("Demucs model initialization failed: " + (error?.message || error));
+  }
+  console.info("[Resonance Demucs] ONNX model ready in " + ((performance.now() - started) / 1000).toFixed(1) + "s");
+  setProgress(40, "Separation model ready");
   return demucsProcessor;
 }
 
 async function getBasicPitchModel() {
   if (!basicPitchModel) {
-    setProgress(45, "Loading note transcription model…");
+    setProgress(41, "Loading note transcription model…");
     basicPitchModel = new BasicPitch("https://unpkg.com/@spotify/basic-pitch@1.0.1/model/model.json");
   }
   return basicPitchModel;
@@ -417,7 +440,9 @@ async function transcribeAudio(file) {
   const demucs = await getDemucsProcessor();
 
   setProgress(10, "Separating vocals, bass, drums and other instruments…");
+  console.info("[Resonance Demucs] Starting stem separation");
   const separated = await demucs.separate(stereo.left, stereo.right);
+  console.info("[Resonance Demucs] Stem separation finished");
 
   setProgress(37, "Loading note transcription model…");
   const basicPitch = await getBasicPitchModel();
@@ -426,12 +451,14 @@ async function transcribeAudio(file) {
 
   for (let index = 0; index < PITCHED_STEMS.length; index++) {
     const stemName = PITCHED_STEMS[index];
-    const start = 42 + index * 17;
+    const start = 43 + index * 16;
+    const end = start + 15;
     setProgress(start, "Transcribing " + stemName + " stem…");
 
     const stemNotes = await transcribeStem(stemName, separated[stemName], originalDuration, basicPitch);
     notes.push(...stemNotes);
     stemCounts[stemName] = stemNotes.length;
+    setProgress(end, "Finished " + stemName + " stem (" + stemNotes.length + " notes)");
   }
 
   stemCounts.drums = separated.drums ? 1 : 0;
