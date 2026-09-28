@@ -19,7 +19,7 @@ def main() -> None:
             events.append({
                 "id": token_id,
                 "type": getattr(event, "type", None),
-                "value": getattr(event, "value", None),
+                "value": int(getattr(event, "value")) if getattr(event, "value", None) is not None else None,
             })
         except Exception:
             events.append({"id": token_id, "type": None, "value": None})
