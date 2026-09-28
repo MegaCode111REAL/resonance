@@ -11,6 +11,7 @@ from .arrangement.baseline import arrange
 from .arrangement.transpose import auto_transpose_midi
 from .pipeline import run
 from .transcription.basic_pitch import transcribe
+from .transcription.yourmt3 import YourMT3Transcriber
 
 
 def build_parser():
@@ -22,6 +23,12 @@ def build_parser():
     p = subparsers.add_parser("transcribe", help="Transcribe audio to MIDI.")
     p.add_argument("audio", type=Path)
     p.add_argument("--output", "-o", type=Path, required=True)
+    p.add_argument(
+        "--backend",
+        choices=["basic-pitch", "yourmt3"],
+        default="basic-pitch",
+        help="Transcription backend. YourMT3 preserves independent model tracks.",
+    )
     p = subparsers.add_parser("analyze", help="Analyze musical structure in MIDI.")
     p.add_argument("midi", type=Path)
     p.add_argument("--output", "-o", type=Path)
@@ -51,7 +58,14 @@ def build_parser():
 def main():
     args = build_parser().parse_args()
     if args.command == "transcribe":
-        result = transcribe(args.audio, args.output)
+        if args.backend == "yourmt3":
+            transcription = YourMT3Transcriber().transcribe(args.audio)
+            from .midi import transcription_to_midi
+
+            transcription_to_midi(transcription, args.output)
+            result = args.output
+        else:
+            result = transcribe(args.audio, args.output)
     elif args.command == "analyze":
         text = json.dumps(analyze_midi(args.midi), indent=2)
         if args.output:
