@@ -10,6 +10,7 @@ neural network entirely in the browser.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import torch
@@ -31,10 +32,17 @@ class BrowserForward(torch.nn.Module):
 
 
 def build_model(checkpoint: Path):
-    import sys
+    repo_root = Path(__file__).resolve().parents[1]
+    yourmt3_root = repo_root / ".build" / "YourMT3"
+    source_root = yourmt3_root / "amt" / "src"
 
-    root = Path(__file__).resolve().parents[2] / ".build" / "YourMT3"
-    sys.path.insert(0, str(root / "amt" / "src"))
+    if not source_root.is_dir():
+        raise RuntimeError(
+            f"Official YourMT3 source was not found at {source_root}. "
+            "Run the browser model build workflow's source checkout step first."
+        )
+
+    sys.path.insert(0, str(source_root))
 
     from model_helper import load_model_checkpoint
 
