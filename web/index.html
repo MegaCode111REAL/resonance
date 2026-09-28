@@ -36,26 +36,15 @@
         </div>
       </div>
 
-      <div class="controls">
-        <label>
-          <span>Instrument</span>
-          <select id="instrument">
-            <option value="piano">Piano</option>
-            <option value="marimba" selected>Marimba</option>
-            <option value="vibraphone">Vibraphone</option>
-            <option value="xylophone">Xylophone</option>
-            <option value="violin">Violin</option>
-            <option value="cello">Cello</option>
-            <option value="flute">Flute</option>
-            <option value="acoustic-guitar">Acoustic Guitar</option>
-            <option value="electric-guitar">Electric Guitar</option>
-            <option value="bass">Bass</option>
-          </select>
-        </label>
-        <label>
-          <span>Parts</span>
-          <input id="parts" type="number" min="1" max="16" value="4">
-        </label>
+      <div class="ensemble-heading">
+        <span>Instrument ensemble</span>
+        <span class="hint">Select multiple instruments and choose how many parts each gets.</span>
+      </div>
+      <div id="instrument-list" class="instrument-list"></div>
+      <div class="tempo-row">
+        <span>Detected tempo</span>
+        <strong id="tempo">120 BPM</strong>
+        <span class="hint">Quantization: 1/16 note</span>
       </div>
 
       <div class="actions">
@@ -89,6 +78,6 @@
       <span>Your audio is decoded, separated and transcribed in this browser. Resonance does not upload the recording.</span>
     </section>
   </main>
-  <script type="module" src="./app.js?v=4"></script>
+  <script type="module" src="./app.js?v=5"></script>
 </body>
 </html>
