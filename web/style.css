@@ -24,3 +24,9 @@ button:hover:not(:disabled){border-color:#657089}button:disabled{opacity:.4;curs
 .privacy{display:flex;gap:10px;justify-content:center;margin:22px 0 0;color:#7f8899;font-size:12px}.privacy strong{color:#b6bfce}
 .hidden{display:none}
 @media(max-width:650px){.app{padding:32px 0}.controls,.stats,.stems,.instrument-list{grid-template-columns:1fr}.privacy{align-items:center;flex-direction:column;text-align:center}header,.panel-heading{align-items:flex-start;flex-direction:column}.status{align-self:flex-start}.actions{display:grid;grid-template-columns:1fr}.actions button{width:100%}}
+
+.score-pages{margin-top:20px;display:grid;gap:18px;overflow:auto}
+.score-page{background:#fff;border-radius:12px;padding:12px;overflow:auto;box-shadow:0 12px 35px rgba(0,0,0,.24)}
+.score-page svg{display:block;width:100%;height:auto;min-width:620px}
+#score-viewer-status{font-size:12px}
+@media(max-width:650px){.score-page{padding:7px}.score-page svg{min-width:560px}}
