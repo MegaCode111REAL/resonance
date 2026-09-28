@@ -11,71 +11,77 @@ permissions:
 jobs:
   export:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Checkout Resonance
         uses: actions/checkout@v4
+
       - name: Install Git LFS
         run: |
           sudo apt-get update
           sudo apt-get install -y git-lfs
           git lfs install
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
+
       - name: Checkout official YourMT3 source
         run: git clone --depth 1 https://huggingface.co/spaces/mimbres/YourMT3 .build/YourMT3
+
       - name: Install YourMT3 runtime
         run: |
           python -m pip install --upgrade pip
           python -m pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install pytorch-lightning einops wandb librosa soundfile mido pyyaml
+          python -m pip install pytorch-lightning einops wandb librosa soundfile mido pyyaml onnx onnxscript onnxruntime
           if [ -f .build/YourMT3/requirements.txt ]; then
             python -m pip install -r .build/YourMT3/requirements.txt
           fi
-          # YourMT3 officially pins Transformers 4.45.1. Newer 4.49+ releases
-          # pass cache_position=None into T5 attention during this teacher-forced
-          # forward path, which crashes before ONNX tracing can complete.
+          # YourMT3 officially pins Transformers 4.45.1.
           python -m pip install --force-reinstall --no-deps transformers==4.45.1
           python - <<'PY'
           import transformers
           assert transformers.__version__ == "4.45.1", transformers.__version__
           print("Transformers:", transformers.__version__)
           PY
+
       - name: Download official no-pitch-shift checkpoint
         run: |
           mkdir -p .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints
-          curl -L --fail --retry 5 --retry-delay 5 \
-            "https://huggingface.co/mimbres/YourMT3/resolve/main/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt?download=true" \
-            -o .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt
+          curl -L --fail --retry 5 --retry-delay 5             "https://huggingface.co/mimbres/YourMT3/resolve/main/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt?download=true"             -o .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt
           ls -lh .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt
           test "$(stat -c%s .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt)" -gt 500000000
-      - name: Export ONNX
+
+      - name: Export encoder and decoder ONNX
         run: |
-          python tools/export_yourmt3_onnx.py             --checkpoint .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt \
-            --output dist/yourmt3-mc13-forward.onnx
+          python tools/export_yourmt3_onnx.py             --checkpoint .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt             --encoder-output dist/yourmt3-encoder.onnx             --decoder-output dist/yourmt3-decoder.onnx
           python tools/yourmt3_browser_metadata.py
-      - name: Validate ONNX graph
+
+      - name: Validate ONNX graphs
         run: |
-          python -m pip install onnx onnxruntime
           python - <<'PY'
           import onnx
           import onnxruntime as ort
-          model = onnx.load("dist/yourmt3-mc13-forward.onnx")
-          onnx.checker.check_model(model)
-          session = ort.InferenceSession("dist/yourmt3-mc13-forward.onnx", providers=["CPUExecutionProvider"])
-          print("inputs:", [(x.name, x.shape, x.type) for x in session.get_inputs()])
-          print("outputs:", [(x.name, x.shape, x.type) for x in session.get_outputs()])
+
+          for path in ("dist/yourmt3-encoder.onnx", "dist/yourmt3-decoder.onnx"):
+              model = onnx.load(path)
+              onnx.checker.check_model(model)
+              session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+              print(path)
+              print("  inputs:", [(x.name, x.shape, x.type) for x in session.get_inputs()])
+              print("  outputs:", [(x.name, x.shape, x.type) for x in session.get_outputs()])
           PY
+
       - name: Publish browser model release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: yourmt3-browser-v1
-          name: Resonance YourMT3 browser model v1
+          tag_name: yourmt3-browser-v2
+          name: Resonance YourMT3 browser model v2
           prerelease: true
           make_latest: false
           files: |
-            dist/yourmt3-mc13-forward.onnx
+            dist/yourmt3-encoder.onnx
+            dist/yourmt3-decoder.onnx
             dist/yourmt3-vocab.json
