@@ -106,8 +106,7 @@ class YourMT3Transcriber:
             )
         if not self.root.is_dir():
             raise YourMT3Error(f"YourMT3 root does not exist: {self.root}")
-        if not self.checkpoint.is_file():
-            raise YourMT3Error(f"YourMT3 checkpoint does not exist: {self.checkpoint}")
+        # The official YourMT3 loader can download/cache the checkpoint by name.
 
     def _default_checkpoint(self) -> Path:
         cache = Path(
