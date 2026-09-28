@@ -2,6 +2,7 @@ import { Midi } from "https://esm.sh/@tonejs/midi@2.0.28";
 import { BasicPitch, outputToNotesPoly, addPitchBendsToNoteEvents, noteFramesToTime } from "https://esm.sh/@spotify/basic-pitch@1.0.1";
 import * as ort from "https://esm.sh/onnxruntime-web@1.20.1";
 import { DemucsProcessor, CONSTANTS as DEMUCS_CONSTANTS } from "https://esm.sh/demucs-web@1.0.2";
+import { detect as detectBeatGrid } from "https://esm.sh/@audio/beat@2.1.3";
 
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 const KEY_NAMES = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"];
@@ -34,16 +35,18 @@ const BASIC_PITCH_DUPLICATE_WINDOW_SECONDS = 0.035;
 
 // The arranger currently writes MIDI at 120 BPM.
 // A 1/16 note is one quarter of a beat = 0.125 seconds.
-const ARRANGEMENT_TEMPO = 120;
+const DEFAULT_TEMPO = 120;
 const QUANTIZE_GRID_BEATS = 1 / 4;
+
+const INSTRUMENT_ORDER = Object.keys(INSTRUMENTS);
 
 const audioInput = document.querySelector("#audio-file");
 const dropzone = document.querySelector("#dropzone");
 const fileInfo = document.querySelector("#file-info");
 const panel = document.querySelector("#arrangement-panel");
 const analysisPanel = document.querySelector("#analysis-panel");
-const instrumentInput = document.querySelector("#instrument");
-const partsInput = document.querySelector("#parts");
+const instrumentList = document.querySelector("#instrument-list");
+const tempoElement = document.querySelector("#tempo");
 const arrangeButton = document.querySelector("#arrange");
 const transposeButton = document.querySelector("#auto-transpose");
 const downloadButton = document.querySelector("#download");
@@ -63,6 +66,7 @@ let arrangedNotes = [];
 let downloadBytes = null;
 let demucsProcessor = null;
 let basicPitchModel = null;
+let detectedTempo = DEFAULT_TEMPO;
 
 function setStatus(message) {
   status.textContent = message;
@@ -100,7 +104,10 @@ function noteName(midi) {
 }
 
 function renderAnalysis(notes, duration, stemCounts) {
+
   if (!notes.length) return;
+
+  if (tempoElement) tempoElement.textContent = Math.round(detectedTempo) + " BPM";
 
   const pitches = notes.map(n => n.midi);
   const min = Math.min(...pitches);
@@ -129,7 +136,7 @@ function renderAnalysis(notes, duration, stemCounts) {
   analysisPanel.classList.remove("hidden");
 }
 
-function quantizeNotes(notes, tempo = ARRANGEMENT_TEMPO) {
+function quantizeNotes(notes, tempo = detectedTempo) {
   const secondsPerBeat = 60 / tempo;
   const gridSeconds = secondsPerBeat * QUANTIZE_GRID_BEATS;
 
@@ -176,7 +183,106 @@ function cleanTranscribedNotes(notes) {
   return quantizeNotes(cleaned);
 }
 
-function buildArrangement(notes, instrumentName, partCount, tempo = ARRANGEMENT_TEMPO) {
+function selectedEnsemble() {
+  return INSTRUMENT_ORDER
+    .map(key => {
+      const input = instrumentList?.querySelector('[data-instrument="' + key + '"]');
+      return {
+        key,
+        parts: Math.max(0, Math.min(8, Number(input?.value) || 0))
+      };
+    })
+    .filter(item => item.parts > 0);
+}
+
+function chooseTargetInstrument(note, ensemble) {
+  const preferred = {
+    bass: ["bass", "cello", "acoustic-guitar"],
+    vocals: ["flute", "violin", "cello", "piano", "vibraphone"],
+    other: ["piano", "marimba", "acoustic-guitar", "electric-guitar", "vibraphone", "violin", "flute", "cello", "xylophone", "bass"]
+  };
+
+  const ordered = preferred[note.stem] || preferred.other;
+  for (const key of ordered) {
+    if (ensemble.some(item => item.key === key)) return key;
+  }
+
+  const byRange = [...ensemble].sort((a, b) => {
+    const ia = INSTRUMENTS[a.key];
+    const ib = INSTRUMENTS[b.key];
+    const da = note.midi < ia.low ? ia.low - note.midi : note.midi > ia.high ? note.midi - ia.high : 0;
+    const db = note.midi < ib.low ? ib.low - note.midi : note.midi > ib.high ? note.midi - ib.high : 0;
+    return da - db;
+  });
+  return byRange[0].key;
+}
+
+function buildEnsembleArrangement(notes, ensemble, tempo = detectedTempo) {
+  const midi = new Midi();
+  midi.header.setTempo(tempo);
+
+  const tracks = [];
+  for (const item of ensemble) {
+    const instrument = INSTRUMENTS[item.key];
+    for (let part = 0; part < item.parts; part++) {
+      const track = midi.addTrack();
+      track.name = instrument.name + " " + (part + 1);
+      track.channel = tracks.length % 16;
+      track.instrument.number = instrument.program;
+      tracks.push({ track, key: item.key, part, parts: item.parts });
+    }
+  }
+
+  const buckets = new Map();
+  for (const note of notes) {
+    const targetKey = chooseTargetInstrument(note, ensemble);
+    const candidates = tracks.filter(track => track.key === targetKey);
+    const timeBucket = Math.round(note.time / (60 / tempo / 4));
+    const bucketKey = targetKey + ":" + timeBucket;
+    const index = buckets.get(bucketKey) ?? 0;
+    buckets.set(bucketKey, index + 1);
+    const target = candidates[index % candidates.length];
+    const instrument = INSTRUMENTS[target.key];
+    const pitch = clampPitch(note.midi, instrument, target.part, target.parts);
+
+    target.track.addNote({
+      midi: pitch,
+      time: note.time,
+      duration: Math.max(0.05, note.duration),
+      velocity: Math.max(0.08, Math.min(1, note.velocity ?? 0.75))
+    });
+  }
+
+  return midi;
+}
+
+function renderInstrumentChoices() {
+  if (!instrumentList) return;
+  instrumentList.innerHTML = INSTRUMENT_ORDER.map(key => {
+    const instrument = INSTRUMENTS[key];
+    const defaultParts = key === "marimba" ? 2 : key === "piano" ? 1 : 0;
+    return '<label class="instrument-choice">' +
+      '<span><input type="checkbox" data-toggle="' + key + '"' + (defaultParts ? " checked" : "") + '><strong>' + instrument.name + '</strong></span>' +
+      '<input data-instrument="' + key + '" type="number" min="0" max="8" value="' + defaultParts + '" aria-label="' + instrument.name + ' parts">' +
+      '</label>';
+  }).join("");
+
+  instrumentList.querySelectorAll("[data-toggle]").forEach(toggle => {
+    toggle.addEventListener("change", () => {
+      const input = instrumentList.querySelector('[data-instrument="' + toggle.dataset.toggle + '"]');
+      if (input) input.value = toggle.checked ? Math.max(1, Number(input.value) || 1) : 0;
+    });
+  });
+
+  instrumentList.querySelectorAll("[data-instrument]").forEach(input => {
+    input.addEventListener("input", () => {
+      const toggle = instrumentList.querySelector('[data-toggle="' + input.dataset.instrument + '"]');
+      if (toggle) toggle.checked = Number(input.value) > 0;
+    });
+  });
+}
+
+function buildArrangement(notes, instrumentName, partCount, tempo = detectedTempo) {
   const instrument = INSTRUMENTS[instrumentName];
   const midi = new Midi();
   midi.header.setTempo(tempo);
@@ -502,6 +608,20 @@ async function transcribeAudio(file) {
 
   setProgress(8, "Preparing 44.1 kHz stereo audio…");
   const stereo = await resampleStereo44100(decodedAudio);
+
+  setProgress(9, "Detecting tempo and beat grid…");
+  try {
+    const monoForBeat = mixToMono(stereo.left, stereo.right);
+    const beatResult = detectBeatGrid(monoForBeat, { fs: 44100, minBpm: 60, maxBpm: 200 });
+    if (Number.isFinite(beatResult.bpm) && beatResult.bpm > 30 && beatResult.bpm < 260) {
+      detectedTempo = beatResult.bpm;
+    } else {
+      detectedTempo = DEFAULT_TEMPO;
+    }
+  } catch (error) {
+    console.warn("[Resonance] Tempo detection failed; using default tempo", error);
+    detectedTempo = DEFAULT_TEMPO;
+  }
   await decodeContext.close();
 
   const demucs = await getDemucsProcessor();
@@ -536,9 +656,10 @@ async function transcribeAudio(file) {
   }
 
   return {
-    notes,
+    notes: cleanTranscribedNotes(notes),
     duration: originalDuration,
-    stemCounts
+    stemCounts,
+    tempo: detectedTempo
   };
 }
 
@@ -594,8 +715,11 @@ dropzone.addEventListener("drop", event => {
 arrangeButton.addEventListener("click", async () => {
   if (!transcription) return;
 
-  const parts = Math.max(1, Math.min(16, Number(partsInput.value) || 1));
-  const instrument = instrumentInput.value;
+  const ensemble = selectedEnsemble();
+  if (!ensemble.length) {
+    showResult("Select at least one instrument and give it at least one part.");
+    return;
+  }
 
   arrangeButton.disabled = true;
   transposeButton.disabled = true;
@@ -603,14 +727,14 @@ arrangeButton.addEventListener("click", async () => {
 
   await new Promise(requestAnimationFrame);
 
-  arrangedMidi = buildArrangement(transcription.notes, instrument, parts);
+  arrangedMidi = buildEnsembleArrangement(transcription.notes, ensemble, detectedTempo);
   arrangedNotes = getArrangementNotes(arrangedMidi);
 
   setProgress(100, "Arrangement complete");
-  setStatus(instrumentName(instrument) + " × " + parts);
+  setStatus(ensemble.map(item => INSTRUMENTS[item.key].name + " × " + item.parts).join(" · "));
   setDownload();
   transposeButton.disabled = arrangedNotes.length === 0;
-  showResult("Created " + parts + " " + INSTRUMENTS[instrument].name + " part" + (parts === 1 ? "" : "s") + " with 1/16-beat quantization.");
+  showResult("Created " + ensemble.reduce((sum, item) => sum + item.parts, 0) + " ensemble parts at " + Math.round(detectedTempo) + " BPM, quantized to 1/16 notes.");
   arrangeButton.disabled = false;
   setTimeout(hideProgress, 700);
 });
@@ -622,8 +746,9 @@ transposeButton.addEventListener("click", async () => {
   setProgress(10, "Testing all 12 chromatic transpositions…");
   await new Promise(requestAnimationFrame);
 
-  const instrument = instrumentInput.value;
-  const best = chooseBestShift(arrangedNotes, instrument);
+  const ensemble = selectedEnsemble();
+  const rangeInstrument = ensemble.length ? ensemble[0].key : "piano";
+  const best = chooseBestShift(arrangedNotes, rangeInstrument);
   applyShiftToArrangement(arrangedMidi, best.shift);
   arrangedNotes = getArrangementNotes(arrangedMidi);
   setDownload();
@@ -662,3 +787,5 @@ downloadButton.addEventListener("click", () => {
 function instrumentName(key) {
   return INSTRUMENTS[key]?.name || key;
 }
+
+renderInstrumentChoices();
