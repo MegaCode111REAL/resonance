@@ -892,6 +892,14 @@ transposeButton.addEventListener("click", async () => {
   setTimeout(hideProgress, 700);
 });
 
+originalDownloadButton.addEventListener("click", () => {
+  if (!transcription?.notes?.length) return;
+
+  const midi = buildOriginalMidi(transcription.notes, transcription.tempo);
+  const base = sourceFile?.name?.replace(/\.[^.]+$/, "") || "resonance";
+  downloadMidi(midi, base + "-unarranged.mid");
+});
+
 downloadButton.addEventListener("click", () => {
   if (!downloadBytes) return;
 
