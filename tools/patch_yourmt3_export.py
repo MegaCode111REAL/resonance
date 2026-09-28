@@ -19,15 +19,13 @@ def main() -> None:
 
     old_indexing = (
         "top_x_list = top_x.tolist()\n"
-        "idx_list = idx.tolist()\n\n"
-        "# Index the correct hidden states and compute the expert hidden state for"
+        "idx_list = idx.tolist()"
     )
     new_indexing = (
         "# Keep expert routing indices as tensors. Python .tolist() creates\n"
         "# data-dependent values that torch.export cannot specialize.\n"
         "top_x_list = top_x\n"
-        "idx_list = idx\n\n"
-        "# Index the correct hidden states and compute the expert hidden state for"
+        "idx_list = idx"
     )
     if old_indexing not in text:
         raise SystemExit(
