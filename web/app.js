@@ -51,6 +51,7 @@ const instrumentList = document.querySelector("#instrument-list");
 const tempoElement = document.querySelector("#tempo");
 const arrangeButton = document.querySelector("#arrange");
 const transposeButton = document.querySelector("#auto-transpose");
+const originalDownloadButton = document.querySelector("#download-original");
 const downloadButton = document.querySelector("#download");
 const status = document.querySelector("#status");
 const progress = document.querySelector("#progress");
@@ -450,6 +451,50 @@ function getArrangementNotes(midi) {
   })));
 }
 
+function buildOriginalMidi(notes, tempo = detectedTempo) {
+  const midi = new Midi();
+  midi.header.setTempo(tempo);
+
+  const stems = ["vocals", "bass", "other"];
+  const labels = {
+    vocals: "Vocals",
+    bass: "Bass",
+    other: "Other"
+  };
+
+  for (const stem of stems) {
+    const trackNotes = notes.filter(note => note.stem === stem);
+    if (!trackNotes.length) continue;
+
+    const track = midi.addTrack();
+    track.name = labels[stem] + " (Unarranged)";
+    track.channel = midi.tracks.length - 1;
+    track.instrument.number = stem === "bass" ? 33 : 0;
+
+    for (const note of trackNotes) {
+      track.addNote({
+        midi: note.midi,
+        time: note.time,
+        duration: Math.max(0.05, note.duration),
+        velocity: Math.max(0.08, Math.min(1, note.velocity ?? 0.75))
+      });
+    }
+  }
+
+  return midi;
+}
+
+function downloadMidi(midi, filename) {
+  const bytes = midi.toArray();
+  const blob = new Blob([bytes], { type: "audio/midi" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function setDownload() {
   downloadBytes = arrangedMidi.toArray();
   downloadButton.disabled = false;
@@ -751,6 +796,7 @@ async function handleAudio(file) {
   downloadButton.disabled = true;
   arrangeButton.disabled = true;
   result.classList.add("hidden");
+  originalDownloadButton.disabled = true;
 
   fileInfo.classList.remove("hidden");
   fileInfo.textContent = file.name + " · " + (file.size / 1048576).toFixed(2) + " MB";
@@ -761,6 +807,7 @@ async function handleAudio(file) {
     transcription = await transcribeAudio(file);
     renderAnalysis(transcription.notes, transcription.duration, transcription.stemCounts);
     arrangeButton.disabled = false;
+    originalDownloadButton.disabled = false;
     setProgress(100, "Separation and transcription complete");
     setStatus(transcription.notes.length + " notes from separated stems");
     setTimeout(hideProgress, 900);
