@@ -334,19 +334,12 @@ async function getDemucsProcessor() {
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.simd = true;
 
-  const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator;
-  if (hasWebGPU) {
-    try {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (adapter) {
-        ort.env.webgpu = { powerPreference: "high-performance" };
-        console.info("[Resonance Demucs] WebGPU adapter detected");
-      }
-    } catch (error) {
-      console.warn("[Resonance Demucs] WebGPU detection failed; using WASM", error);
-    }
-  }
-
+  // GitHub Pages does not provide the COOP/COEP isolation required by
+  // ONNX Runtime's more advanced browser backends. Force the stable WASM
+  // backend here instead of probing WebGPU, which can throw NotFoundError
+  // in Safari even when navigator.gpu exists.
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.simd = true;
   demucsProcessor = new DemucsProcessor({
     ort,
     sessionOptions: {
