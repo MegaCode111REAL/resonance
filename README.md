@@ -143,7 +143,7 @@ Future Resonance models will work toward:
 
 ### Multi-instrument transcription branch
 
-The `feature/yourmt3-transcription` branch adds a real multi-track transcription backend based on YourMT3+. Unlike the earlier fixed stem pipeline, the model can emit independent instrument tracks rather than forcing everything into vocals/bass/other. The upstream YourMT3+ project documents a multi-instrument, multi-track model, and the maintained MT3-Infer wrapper exposes it as the `yourmt3` backend. citeturn0search4turn1search0
+The `feature/yourmt3-transcription` branch adds a real multi-track transcription backend based on YourMT3+. Unlike the earlier fixed stem pipeline, the model can emit independent instrument tracks rather than forcing everything into vocals/bass/other. The upstream YourMT3+ project documents a multi-instrument, multi-track model, and the maintained MT3-Infer wrapper exposes it as the `yourmt3` backend.
 
 Install the optional backend:
 
@@ -157,7 +157,7 @@ Then:
 resonance transcribe song.wav --backend yourmt3 --output output/song.mid
 ~~~
 
-The first YourMT3 run downloads/caches its model checkpoint through the MT3-Infer backend. The checkpoint is roughly 536 MB according to the current MT3-Infer model table. citeturn1search0
+The first YourMT3 run downloads/caches its model checkpoint through the MT3-Infer backend. The checkpoint is roughly 536 MB according to the current MT3-Infer model table.
 
 For development against the official YourMT3 checkout instead, set:
 
