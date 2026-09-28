@@ -10,7 +10,6 @@ neural network entirely in the browser.
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 from pathlib import Path
 
@@ -80,6 +79,9 @@ def build_model(checkpoint: Path):
     sys.path.insert(0, str(source_root))
 
     from model_helper import load_model_checkpoint
+
+    import os
+    os.chdir(yourmt3_root)
 
     args = [
         CHECKPOINT,
