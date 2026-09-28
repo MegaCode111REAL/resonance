@@ -15,7 +15,7 @@ def run(
     instrument: str,
     parts: int,
     backend: str = "basic-pitch",
-    yourmt3_model: str = "yptf_moe_nops",
+    yourmt3_model: str = "yourmt3",
     yourmt3_device: str = "auto",
 ) -> Path:
     """Transcribe audio and arrange the resulting MIDI."""
