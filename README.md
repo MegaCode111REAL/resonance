@@ -1,5 +1,5 @@
 # Resonance
-[![CI](https://github.com/MegaCode111REAL/resonance/actions/workflows/ci.yml/badge.svg)](https://github.com/MegaCode111REAL/resonance/actions/workflows/ci.yml) [![pages-build-deployment](https://github.com/MegaCode111REAL/resonance/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/MegaCode111REAL/resonance/actions/workflows/pages/pages-build-deployment)
+[![CI](https://github.com/MegaCode111REAL/resonance/actions/workflows/ci.yml/badge.svg)](https://github.com/MegaCode111REAL/resonance/actions/workflows/ci.yml) [![pages-build-deployment](https://github.com/MegaCode111REAL/resonance/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/MegaCode111REAL/resonance/actions/workflows/pages/pages-build-deployment)[![Build browser YourMT3 model](https://github.com/MegaCode111REAL/resonance/actions/workflows/build-yourmt3-browser.yml/badge.svg)](https://github.com/MegaCode111REAL/resonance/actions/workflows/build-yourmt3-browser.yml)
 
 Resonance is an open-source AI system for understanding recorded music and creating new MIDI arrangements for user-selected instruments.
 
