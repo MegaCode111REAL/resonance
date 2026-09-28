@@ -22,7 +22,7 @@ from .multi_instrument import (
     merge_short_parts,
 )
 
-DEFAULT_MODEL_KEY = "yptf_moe_nops"
+DEFAULT_MODEL_KEY = "yourmt3"
 
 
 class YourMT3Error(RuntimeError):
