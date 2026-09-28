@@ -36,12 +36,21 @@ def build_model(checkpoint: Path):
     yourmt3_root = repo_root / ".build" / "YourMT3"
     source_root = yourmt3_root / "amt" / "src"
 
-    if not source_root.is_dir():
+    if not yourmt3_root.is_dir():
         raise RuntimeError(
-            f"Official YourMT3 source was not found at {source_root}. "
+            f"Official YourMT3 source was not found at {yourmt3_root}. "
             "Run the browser model build workflow's source checkout step first."
         )
 
+    if not source_root.is_dir():
+        raise RuntimeError(
+            f"YourMT3 Python source was not found at {source_root}."
+        )
+
+    # model_helper.py lives at the root of the official YourMT3 checkout,
+    # while its model/config packages live under amt/src. The official Space
+    # adds amt/src to sys.path and imports model_helper from the checkout root.
+    sys.path.insert(0, str(yourmt3_root))
     sys.path.insert(0, str(source_root))
 
     from model_helper import load_model_checkpoint
