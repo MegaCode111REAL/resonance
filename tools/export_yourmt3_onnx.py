@@ -10,6 +10,7 @@ neural network entirely in the browser.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -47,6 +48,31 @@ def build_model(checkpoint: Path):
             f"YourMT3 Python source was not found at {source_root}."
         )
 
+    if not checkpoint.is_file():
+        raise RuntimeError(f"YourMT3 checkpoint was not found: {checkpoint}")
+
+    # YourMT3's initialize_trainer interprets the first checkpoint argument as
+    # an experiment name, then resolves:
+    #
+    #   amt/logs/<project>/<experiment>/checkpoints/last.ckpt
+    #
+    # The CI workflow downloads the same official checkpoint to a simple build
+    # path, so normalize it into the layout expected by the official loader.
+    checkpoint_dir = (
+        yourmt3_root
+        / "amt"
+        / "logs"
+        / "2024"
+        / CHECKPOINT
+        / "checkpoints"
+    )
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    normalized_checkpoint = checkpoint_dir / "last.ckpt"
+
+    if checkpoint.resolve() != normalized_checkpoint.resolve():
+        if not normalized_checkpoint.exists():
+            shutil.copy2(checkpoint, normalized_checkpoint)
+
     # model_helper.py lives at the root of the official YourMT3 checkout,
     # while its model/config packages live under amt/src. The official Space
     # adds amt/src to sys.path and imports model_helper from the checkout root.
@@ -56,7 +82,7 @@ def build_model(checkpoint: Path):
     from model_helper import load_model_checkpoint
 
     args = [
-        str(checkpoint),
+        CHECKPOINT,
         "-p", "2024",
         "-tk", "mc13_full_plus_256",
         "-dec", "multi-t5",
@@ -111,7 +137,10 @@ def main() -> None:
             do_constant_folding=True,
         )
 
-    print(f"Exported {args.output} ({args.output.stat().st_size / 1048576:.1f} MiB)")
+    print(
+        f"Exported {args.output} "
+        f"({args.output.stat().st_size / 1048576:.1f} MiB)"
+    )
 
 
 if __name__ == "__main__":
