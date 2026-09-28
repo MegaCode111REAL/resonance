@@ -32,28 +32,7 @@ jobs:
         run: git clone --depth 1 https://huggingface.co/spaces/mimbres/YourMT3 .build/YourMT3
 
       - name: Patch YourMT3 MoE for torch.export
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path(".build/YourMT3/amt/src/model/ff_layer.py")
-          s = p.read_text()
-
-          old_guard = "if top_x.shape[0] == 0:"
-          new_guard = "if torch.fx.experimental.symbolic_shapes.guard_size_oblivious(top_x.shape[0] == 0):"
-          if old_guard not in s:
-              raise SystemExit("Expected YourMT3 MoE empty-expert guard was not found")
-          s = s.replace(old_guard, new_guard, 1)
-
-          old_indexing = "top_x_list = top_x.tolist()" + chr(10) + "idx_list = idx.tolist()" + chr(10) + chr(10) + "# Index the correct hidden states and compute the expert hidden state for"
-          new_indexing = "# Keep expert routing indices as tensors. Python .tolist() creates" + chr(10) + "# data-dependent values that torch.export cannot specialize." + chr(10) + "top_x_list = top_x" + chr(10) + "idx_list = idx" + chr(10) + chr(10) + "# Index the correct hidden states and compute the expert hidden state for"
-          if old_indexing not in s:
-              raise SystemExit("Expected YourMT3 MoE Python-list indexing block was not found")
-          s = s.replace(old_indexing, new_indexing, 1)
-
-          p.write_text(s)
-          print("Patched", p)
-          PY
+        run: python tools/patch_yourmt3_export.py
 
       - name: Install YourMT3 runtime
         run: |
