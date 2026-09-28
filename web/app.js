@@ -21,6 +21,22 @@ const INSTRUMENTS = {
 
 const PITCHED_STEMS = ["vocals", "bass", "other"];
 
+const BASIC_PITCH_PROFILES = {
+  vocals: { minFreq: 65.41, maxFreq: 1046.5 },
+  bass: { minFreq: 27.5, maxFreq: 440 },
+  other: { minFreq: 27.5, maxFreq: 4186.01 }
+};
+
+const BASIC_PITCH_ONSET_THRESHOLD = 0.5;
+const BASIC_PITCH_FRAME_THRESHOLD = 0.4;
+const BASIC_PITCH_MIN_NOTE_LEN_FRAMES = 11;
+const BASIC_PITCH_DUPLICATE_WINDOW_SECONDS = 0.035;
+
+// The arranger currently writes MIDI at 120 BPM.
+// A 1/16 note is one quarter of a beat = 0.125 seconds.
+const ARRANGEMENT_TEMPO = 120;
+const QUANTIZE_GRID_BEATS = 1 / 4;
+
 const audioInput = document.querySelector("#audio-file");
 const dropzone = document.querySelector("#dropzone");
 const fileInfo = document.querySelector("#file-info");
@@ -113,7 +129,54 @@ function renderAnalysis(notes, duration, stemCounts) {
   analysisPanel.classList.remove("hidden");
 }
 
-function buildArrangement(notes, instrumentName, partCount, tempo = 120) {
+function quantizeNotes(notes, tempo = ARRANGEMENT_TEMPO) {
+  const secondsPerBeat = 60 / tempo;
+  const gridSeconds = secondsPerBeat * QUANTIZE_GRID_BEATS;
+
+  return notes
+    .map(note => {
+      const start = Math.max(0, Math.round(note.time / gridSeconds) * gridSeconds);
+      const rawEnd = Math.max(note.time + note.duration, note.time + 0.05);
+      const end = Math.max(start + gridSeconds, Math.round(rawEnd / gridSeconds) * gridSeconds);
+
+      return {
+        ...note,
+        time: start,
+        duration: Math.max(gridSeconds, end - start)
+      };
+    })
+    .sort((a, b) => a.time - b.time || b.midi - a.midi);
+}
+
+function cleanTranscribedNotes(notes) {
+  const sorted = [...notes]
+    .filter(note => Number.isFinite(note.midi) && Number.isFinite(note.time) && Number.isFinite(note.duration))
+    .filter(note => (note.velocity ?? 0) >= 0.12)
+    .sort((a, b) => a.time - b.time || b.velocity - a.velocity);
+
+  const cleaned = [];
+
+  for (const note of sorted) {
+    const duplicateIndex = cleaned.findIndex(existing =>
+      existing.midi === note.midi &&
+      existing.stem === note.stem &&
+      Math.abs(existing.time - note.time) <= BASIC_PITCH_DUPLICATE_WINDOW_SECONDS
+    );
+
+    if (duplicateIndex >= 0) {
+      if ((note.velocity ?? 0) > (cleaned[duplicateIndex].velocity ?? 0)) {
+        cleaned[duplicateIndex] = note;
+      }
+      continue;
+    }
+
+    cleaned.push(note);
+  }
+
+  return quantizeNotes(cleaned);
+}
+
+function buildArrangement(notes, instrumentName, partCount, tempo = ARRANGEMENT_TEMPO) {
   const instrument = INSTRUMENTS[instrumentName];
   const midi = new Midi();
   midi.header.setTempo(tempo);
@@ -407,7 +470,18 @@ async function transcribeStem(stemName, stem, duration, basicPitch) {
     () => {}
   );
 
-  const noteEvents = outputToNotesPoly(frames, onsets, 0.25, 0.25, 5);
+  const profile = BASIC_PITCH_PROFILES[stemName] || BASIC_PITCH_PROFILES.other;
+  const noteEvents = outputToNotesPoly(
+    frames,
+    onsets,
+    BASIC_PITCH_ONSET_THRESHOLD,
+    BASIC_PITCH_FRAME_THRESHOLD,
+    BASIC_PITCH_MIN_NOTE_LEN_FRAMES,
+    true,
+    profile.maxFreq,
+    profile.minFreq,
+    true
+  );
   const withBends = addPitchBendsToNoteEvents(contours, noteEvents);
 
   return noteFramesToTime(withBends).map(note => ({
@@ -432,7 +506,7 @@ async function transcribeAudio(file) {
 
   const demucs = await getDemucsProcessor();
 
-  setProgress(10, "Separating vocals, bass, drums and other instruments…");
+  setProgress(10, "Separating audio into source stems…");
   console.info("[Resonance Demucs] Starting stem separation");
   const separated = await demucs.separate(stereo.left, stereo.right);
   console.info("[Resonance Demucs] Stem separation finished");
@@ -536,7 +610,7 @@ arrangeButton.addEventListener("click", async () => {
   setStatus(instrumentName(instrument) + " × " + parts);
   setDownload();
   transposeButton.disabled = arrangedNotes.length === 0;
-  showResult("Created " + parts + " " + INSTRUMENTS[instrument].name + " part" + (parts === 1 ? "" : "s") + " from the separated transcription.");
+  showResult("Created " + parts + " " + INSTRUMENTS[instrument].name + " part" + (parts === 1 ? "" : "s") + " with 1/16-beat quantization.");
   arrangeButton.disabled = false;
   setTimeout(hideProgress, 700);
 });
