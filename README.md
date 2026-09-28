@@ -167,7 +167,7 @@ export YOURMT3_ROOT=/path/to/YourMT3
 
 The branch also contains a small Resonance runtime bridge for the official model implementation. It keeps the model implementation and weights outside the Resonance repository rather than copying the upstream research code into the project.
 
-The browser version is intentionally still on its existing browser-native transcription path. Pyodide can run Python/WebAssembly in a GitHub Pages deployment, but it does not make the PyTorch YourMT3 runtime browser-compatible; the current MT3-Infer project also explicitly does not provide an ONNX export. citeturn1search0turn0search3 The YourMT3 work in this branch is therefore a complete native Python backend, while a separate model-runtime conversion is still required before GitHub Pages can execute the neural model itself.
+The browser version is intentionally still on its existing browser-native transcription path. Pyodide can run Python/WebAssembly in a GitHub Pages deployment, but it does not make the PyTorch YourMT3 runtime browser-compatible; the current MT3-Infer project also explicitly does not provide an ONNX export. The YourMT3 work in this branch is therefore a complete native Python backend, while a separate model-runtime conversion is still required before GitHub Pages can execute the neural model itself.
 
 ### Arrangement
 
@@ -257,4 +257,4 @@ The Resonance source code is currently distributed under the MIT License. Model 
 
 YourMT3 is treated as a multi-track transcription model rather than a stem splitter. The Resonance adapter reads every non-empty MIDI track independently and keeps its notes, track name and MIDI program separate. Two tracks that happen to contain the same instrument are **not** merged merely because their instrument labels match. Fragment merging is an explicit optional post-processing operation and is disabled by default.
 
-The maintained MT3-Infer documentation describes its YourMT3 backend as a multi-task model and the current model table lists the YourMT3 checkpoint at about 536 MB. citeturn3search0 Independent multi-track output is also the approach used by current YourMT3+ applications; for example, Muse documents up to 13 output tracks from one YourMT3+ pass. citeturn3search7
+The maintained MT3-Infer documentation describes its YourMT3 backend as a multi-task model and the current model table lists the YourMT3 checkpoint at about 536 MB. Independent multi-track output is also the approach used by current YourMT3+ applications; for example, Muse documents up to 13 output tracks from one YourMT3+ pass.
