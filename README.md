@@ -154,7 +154,7 @@ python -m pip install -e ".[yourmt3]"
 Then:
 
 ~~~bash
-resonance transcribe song.wav --backend yourmt3 --output output/song.mid
+resonance transcribe song.wav --backend yourmt3 --device auto --output output/song.mid
 ~~~
 
 The first YourMT3 run downloads/caches its model checkpoint through the MT3-Infer backend. The checkpoint is roughly 536 MB according to the current MT3-Infer model table.
@@ -167,7 +167,7 @@ export YOURMT3_ROOT=/path/to/YourMT3
 
 The branch also contains a small Resonance runtime bridge for the official model implementation. It keeps the model implementation and weights outside the Resonance repository rather than copying the upstream research code into the project.
 
-The browser version is intentionally **not** switched to this backend yet. YourMT3 is an autoregressive PyTorch model, and the current MT3-Infer project explicitly does not provide an ONNX export. citeturn1search0 The next browser step is therefore a dedicated browser-runtime conversion rather than pretending the Python backend can run on GitHub Pages.
+The browser version is intentionally still on its existing browser-native transcription path. Pyodide can run Python/WebAssembly in a GitHub Pages deployment, but it does not make the PyTorch YourMT3 runtime browser-compatible; the current MT3-Infer project also explicitly does not provide an ONNX export. citeturn1search0turn0search3 The YourMT3 work in this branch is therefore a complete native Python backend, while a separate model-runtime conversion is still required before GitHub Pages can execute the neural model itself.
 
 ### Arrangement
 
@@ -251,3 +251,10 @@ resonance/
 ## License
 
 The Resonance source code is currently distributed under the MIT License. Model weights and third-party models retain their own licenses; see their respective repositories and model cards before redistribution.
+
+
+### YourMT3 track behavior
+
+YourMT3 is treated as a multi-track transcription model rather than a stem splitter. The Resonance adapter reads every non-empty MIDI track independently and keeps its notes, track name and MIDI program separate. Two tracks that happen to contain the same instrument are **not** merged merely because their instrument labels match. Fragment merging is an explicit optional post-processing operation and is disabled by default.
+
+The maintained MT3-Infer documentation describes its YourMT3 backend as a multi-task model and the current model table lists the YourMT3 checkpoint at about 536 MB. citeturn3search0 Independent multi-track output is also the approach used by current YourMT3+ applications; for example, Muse documents up to 13 output tracks from one YourMT3+ pass. citeturn3search7
