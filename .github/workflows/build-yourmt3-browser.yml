@@ -24,24 +24,29 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Checkout official YourMT3 source
         run: git clone --depth 1 https://huggingface.co/spaces/mimbres/YourMT3 .build/YourMT3
       - name: Install YourMT3 runtime
         run: |
           python -m pip install --upgrade pip
-          python -m pip install torch==2.7.1 torchaudio==2.7.1
+          python -m pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cpu
           python -m pip install transformers==4.49.0 pytorch-lightning einops wandb librosa soundfile mido pyyaml
           if [ -f .build/YourMT3/amt/src/requirements.txt ]; then
             python -m pip install -r .build/YourMT3/amt/src/requirements.txt
           fi
       - name: Download official no-pitch-shift checkpoint
         run: |
-          mkdir -p .build/checkpoints
-          curl -L --fail --retry 5 --retry-delay 5             "https://huggingface.co/mimbres/YourMT3/resolve/main/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt?download=true"             -o .build/checkpoints/yourmt3.ckpt
-          ls -lh .build/checkpoints/yourmt3.ckpt
+          mkdir -p .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints
+          curl -L --fail --retry 5 --retry-delay 5 \
+            "https://huggingface.co/mimbres/YourMT3/resolve/main/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt?download=true" \
+            -o .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt
+          ls -lh .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt
+          test "$(stat -c%s .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt)" -gt 500000000
       - name: Export ONNX
         run: |
-          python tools/export_yourmt3_onnx.py             --checkpoint .build/checkpoints/yourmt3.ckpt             --output dist/yourmt3-mc13-forward.onnx
+          python tools/export_yourmt3_onnx.py             --checkpoint .build/YourMT3/amt/logs/2024/mc13_256_g4_all_v7_mt3f_sqr_rms_moe_wf4_n8k2_silu_rope_rp_b36_nops/checkpoints/last.ckpt \
+            --output dist/yourmt3-mc13-forward.onnx
           python tools/yourmt3_browser_metadata.py
       - name: Validate ONNX graph
         run: |
