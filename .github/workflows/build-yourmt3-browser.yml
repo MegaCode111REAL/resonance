@@ -31,6 +31,20 @@ jobs:
       - name: Checkout official YourMT3 source
         run: git clone --depth 1 https://huggingface.co/spaces/mimbres/YourMT3 .build/YourMT3
 
+      - name: Patch YourMT3 MoE export guard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path(".build/YourMT3/amt/src/model/ff_layer.py")
+          s = p.read_text()
+          old = "if top_x.shape[0] == 0:"
+          new = "if torch.fx.experimental.symbolic_shapes.guard_size_oblivious(top_x.shape[0] == 0):"
+          if old not in s:
+              raise SystemExit("Expected YourMT3 MoE guard was not found")
+          p.write_text(s.replace(old, new, 1))
+          print("Patched", p)
+          PY
+
       - name: Install YourMT3 runtime
         run: |
           python -m pip install --upgrade pip
