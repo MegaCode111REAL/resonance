@@ -20,22 +20,18 @@ def main() -> None:
     old_top_x = "top_x_list = top_x.tolist()"
     old_idx = "idx_list = idx.tolist()"
     if old_top_x not in text or old_idx not in text:
-        raise SystemExit("Expected YourMT3 MoE Python-list indexing lines were not found")
+        raise SystemExit(
+            "Expected YourMT3 MoE Python-list indexing lines were not found"
+        )
 
     text = text.replace(
         old_top_x,
         "# Keep expert routing indices as tensors. Python .tolist() creates\n"
-        "            # data-dependent values that torch.export cannot specialize.\n"
-        "            top_x_list = top_x",
+        "# data-dependent values that torch.export cannot specialize.\n"
+        "top_x_list = top_x",
         1,
     )
-    text = text.replace("idx_list = idx.tolist()", "idx_list = idx", 1)
-
-    if old_indexing not in text:
-        raise SystemExit(
-            "Expected YourMT3 MoE Python-list indexing block was not found"
-        )
-    text = text.replace(old_indexing, new_indexing, 1)
+    text = text.replace(old_idx, "idx_list = idx", 1)
 
     TARGET.write_text(text)
     print(f"Patched {TARGET}")
