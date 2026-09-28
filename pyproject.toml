@@ -21,7 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 yourmt3 = [
-    "mt3-infer[torch]",\n    "soundfile>=0.12.1",
+    "mt3-infer[torch]",
+    "soundfile>=0.12.1",
 ]
 dev = [
     "pytest>=8.3",
