@@ -4,6 +4,8 @@ import * as ort from "https://esm.sh/onnxruntime-web@1.20.1";
 import { DemucsProcessor, CONSTANTS as DEMUCS_CONSTANTS } from "https://esm.sh/demucs-web@1.0.2";
 import { detect as detectBeatGrid } from "https://esm.sh/@audio/beat@2.1.3";
 
+const WEBMSCORE_URL = "https://cdn.jsdelivr.net/npm/webmscore@1.2.1/webmscore.mjs";
+
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 const KEY_NAMES = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"];
 
@@ -67,6 +69,79 @@ let downloadBytes = null;
 let demucsProcessor = null;
 let basicPitchModel = null;
 let detectedTempo = DEFAULT_TEMPO;
+let webMscorePromise = null;
+let webMscoreScore = null;
+
+async function getWebMscore() {
+  if (!webMscorePromise) {
+    console.info("[Resonance WebMscore] Initializing MuseScore renderer");
+    const started = performance.now();
+    webMscorePromise = import(WEBMSCORE_URL).then(async module => {
+      const WebMscore = module.default;
+      await WebMscore.ready;
+      console.info("[Resonance WebMscore] Renderer ready in " + ((performance.now() - started) / 1000).toFixed(1) + "s");
+      return WebMscore;
+    }).catch(error => {
+      webMscorePromise = null;
+      console.error("[Resonance WebMscore] Initialization failed", error);
+      throw error;
+    });
+  }
+
+  return webMscorePromise;
+}
+
+function warmWebMscore() {
+  const start = () => {
+    getWebMscore().catch(() => {});
+  };
+
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(start, { timeout: 2500 });
+  } else {
+    setTimeout(start, 1200);
+  }
+}
+
+async function renderScorePreview() {
+  if (!arrangedMidi) return;
+
+  const viewer = document.querySelector("#score-viewer");
+  const viewerStatus = document.querySelector("#score-viewer-status");
+  const scorePages = document.querySelector("#score-pages");
+  if (!viewer || !viewerStatus || !scorePages) return;
+
+  viewer.classList.remove("hidden");
+  scorePages.innerHTML = "";
+  viewerStatus.textContent = "Loading MuseScore renderer…";
+
+  try {
+    const WebMscore = await getWebMscore();
+
+    if (webMscoreScore) {
+      webMscoreScore.destroy();
+      webMscoreScore = null;
+    }
+
+    viewerStatus.textContent = "Engraving score…";
+    const midiBytes = arrangedMidi.toArray();
+    webMscoreScore = await WebMscore.load("midi", midiBytes, [], true);
+
+    const pageCount = await webMscoreScore.npages();
+    for (let page = 0; page < pageCount; page++) {
+      const svg = await webMscoreScore.saveSvg(page, false);
+      const pageElement = document.createElement("div");
+      pageElement.className = "score-page";
+      pageElement.innerHTML = svg;
+      scorePages.appendChild(pageElement);
+    }
+
+    viewerStatus.textContent = pageCount + (pageCount === 1 ? " page" : " pages") + " · MuseScore engraving";
+  } catch (error) {
+    console.error("[Resonance WebMscore] Rendering failed", error);
+    viewerStatus.textContent = "Score preview failed: " + (error?.message || error);
+  }
+}
 
 function setStatus(message) {
   status.textContent = message;
@@ -734,6 +809,7 @@ arrangeButton.addEventListener("click", async () => {
   setStatus(ensemble.map(item => INSTRUMENTS[item.key].name + " × " + item.parts).join(" · "));
   setDownload();
   transposeButton.disabled = arrangedNotes.length === 0;
+  await renderScorePreview();
   showResult("Created " + ensemble.reduce((sum, item) => sum + item.parts, 0) + " ensemble parts at " + Math.round(detectedTempo) + " BPM, quantized to 1/16 notes.");
   arrangeButton.disabled = false;
   setTimeout(hideProgress, 700);
@@ -789,3 +865,4 @@ function instrumentName(key) {
 }
 
 renderInstrumentChoices();
+warmWebMscore();
