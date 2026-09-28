@@ -719,67 +719,135 @@ async function transcribeStem(stemName, stem, duration, basicPitch) {
   }));
 }
 
+function gmProgramName(program) {
+  const names = [
+    "Piano", "Piano", "Electric Piano", "Honky-tonk Piano", "Electric Piano", "Electric Piano",
+    "Harpsichord", "Clavinet", "Celesta", "Glockenspiel", "Music Box", "Vibraphone",
+    "Marimba", "Xylophone", "Tubular Bells", "Dulcimer", "Organ", "Organ", "Organ", "Church Organ",
+    "Reed Organ", "Accordion", "Harmonica", "Tango Accordion", "Acoustic Guitar", "Acoustic Guitar",
+    "Electric Guitar", "Electric Guitar", "Electric Guitar", "Overdriven Guitar", "Distortion Guitar",
+    "Guitar Harmonics", "Acoustic Bass", "Electric Bass", "Electric Bass", "Fretless Bass",
+    "Slap Bass", "Slap Bass", "Synth Bass", "Synth Bass", "Violin", "Viola", "Cello",
+    "Contrabass", "Tremolo Strings", "Pizzicato Strings", "Orchestral Harp", "Timpani",
+    "String Ensemble", "String Ensemble", "Synth Strings", "Synth Strings", "Choir", "Voice",
+    "Synth Voice", "Orchestra Hit", "Trumpet", "Trombone", "Tuba", "Muted Trumpet",
+    "French Horn", "Brass Section", "Synth Brass", "Synth Brass", "Soprano Sax", "Alto Sax",
+    "Tenor Sax", "Baritone Sax", "Oboe", "English Horn", "Bassoon", "Clarinet", "Piccolo",
+    "Flute", "Recorder", "Pan Flute", "Blown Bottle", "Shakuhachi", "Whistle", "Ocarina",
+    "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Pad", "Pad", "Pad",
+    "Pad", "Pad", "Pad", "Pad", "Pad", "FX", "FX", "FX", "FX", "FX", "FX", "FX", "FX",
+    "Sitar", "Banjo", "Shamisen", "Koto", "Kalimba", "Bagpipe", "Fiddle", "Shanai",
+    "Tinkle Bell", "Agogo", "Steel Drums", "Woodblock", "Taiko", "Melodic Tom", "Synth Drum",
+    "Reverse Cymbal", "Guitar Fret Noise", "Breath Noise", "Seashore", "Bird Tweet",
+    "Telephone", "Helicopter", "Applause", "Gunshot"
+  ];
+  return names[program] || (program === 128 ? "Drums" : "MIDI " + (program + 1));
+}
+
+function stemForProgram(program, isDrum) {
+  if (isDrum || program === 128) return "drums";
+  if (program >= 32 && program <= 39) return "bass";
+  if (program >= 52 && program <= 55) return "vocals";
+  return "other";
+}
+
+async function transcribeWithYourMT3(audioBuffer) {
+  const targetRate = 16000;
+  const frameCount = Math.ceil(audioBuffer.duration * targetRate);
+  const context = new OfflineAudioContext(1, frameCount, targetRate);
+  const source = context.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(context.destination);
+  source.start(0);
+  const rendered = await context.startRendering();
+  const mono = rendered.getChannelData(0);
+
+  return new Promise((resolve, reject) => {
+    const worker = new Worker("./yourmt3_worker.js", { type: "module" });
+    const cleanup = () => worker.terminate();
+
+    worker.onmessage = event => {
+      const message = event.data;
+      if (message.type === "progress") {
+        setProgress(message.value, message.message);
+        return;
+      }
+      if (message.type === "error") {
+        cleanup();
+        reject(new Error(message.message));
+        return;
+      }
+      if (message.type !== "result") return;
+
+      const notes = message.notes.map(note => ({
+        midi: Math.max(0, Math.min(127, Math.round(note.midi))),
+        time: Math.max(0, note.time),
+        duration: Math.max(0.025, note.duration),
+        velocity: Math.max(0.08, Math.min(1, note.velocity)),
+        stem: stemForProgram(note.program, note.isDrum),
+        program: note.program,
+        isDrum: Boolean(note.isDrum),
+        sourcePart: note.isDrum ? "Drums" : gmProgramName(note.program)
+      }));
+
+      cleanup();
+      resolve({
+        notes: cleanTranscribedNotes(notes),
+        duration: audioBuffer.duration,
+        tempo: detectedTempo,
+        stemCounts: {
+          vocals: notes.filter(note => note.stem === "vocals").length,
+          bass: notes.filter(note => note.stem === "bass").length,
+          other: notes.filter(note => note.stem === "other").length,
+          drums: notes.filter(note => note.stem === "drums").length
+        }
+      });
+    };
+
+    worker.onerror = event => {
+      cleanup();
+      reject(event.error || new Error(event.message || "YourMT3 worker failed."));
+    };
+
+    worker.postMessage({ type: "transcribe", audio: mono }, [mono.buffer]);
+  });
+}
+
 async function transcribeAudio(file) {
   setProgress(2, "Decoding audio locally…");
 
-  const decodeContext = new AudioContext({ sampleRate: 44100 });
+  const decodeContext = new AudioContext();
   const decodedAudio = await decodeContext.decodeAudioData(await file.arrayBuffer());
   const originalDuration = decodedAudio.duration;
 
-  setProgress(8, "Preparing 44.1 kHz stereo audio…");
-  const stereo = await resampleStereo44100(decodedAudio);
-
-  setProgress(9, "Detecting tempo and beat grid…");
+  setProgress(5, "Detecting tempo and beat grid…");
   try {
-    const monoForBeat = mixToMono(stereo.left, stereo.right);
-    const beatResult = detectBeatGrid(monoForBeat, { fs: 44100, minBpm: 60, maxBpm: 200 });
-    if (Number.isFinite(beatResult.bpm) && beatResult.bpm > 30 && beatResult.bpm < 260) {
-      detectedTempo = beatResult.bpm;
-    } else {
-      detectedTempo = DEFAULT_TEMPO;
-    }
+    const monoForBeat = decodedAudio.numberOfChannels > 1
+      ? mixToMono(decodedAudio.getChannelData(0), decodedAudio.getChannelData(1))
+      : decodedAudio.getChannelData(0);
+    const sourceRate = decodedAudio.sampleRate;
+    const beatResult = detectBeatGrid(monoForBeat, {
+      fs: sourceRate,
+      minBpm: 60,
+      maxBpm: 200
+    });
+    detectedTempo = Number.isFinite(beatResult.bpm) ? beatResult.bpm : DEFAULT_TEMPO;
   } catch (error) {
     console.warn("[Resonance] Tempo detection failed; using default tempo", error);
     detectedTempo = DEFAULT_TEMPO;
   }
+
+  setProgress(10, "Loading multi-instrument YourMT3 model…");
+  const result = await transcribeWithYourMT3(decodedAudio);
   await decodeContext.close();
 
-  const demucs = await getDemucsProcessor();
-
-  setProgress(10, "Separating audio into source stems…");
-  console.info("[Resonance Demucs] Starting stem separation");
-  const separated = await demucs.separate(stereo.left, stereo.right);
-  console.info("[Resonance Demucs] Stem separation finished");
-
-  setProgress(37, "Loading note transcription model…");
-  const basicPitch = await getBasicPitchModel();
-  const notes = [];
-  const stemCounts = { vocals: 0, bass: 0, other: 0, drums: 0 };
-
-  for (let index = 0; index < PITCHED_STEMS.length; index++) {
-    const stemName = PITCHED_STEMS[index];
-    const start = 43 + index * 16;
-    const end = start + 15;
-    setProgress(start, "Transcribing " + stemName + " stem…");
-
-    const stemNotes = await transcribeStem(stemName, separated[stemName], originalDuration, basicPitch);
-    notes.push(...stemNotes);
-    stemCounts[stemName] = stemNotes.length;
-    setProgress(end, "Finished " + stemName + " stem (" + stemNotes.length + " notes)");
-  }
-
-  stemCounts.drums = separated.drums ? 1 : 0;
-  notes.sort((a, b) => a.time - b.time || b.midi - a.midi);
-
-  if (!notes.length) {
-    throw new Error("The separated stems contained no pitched notes that Basic Pitch could transcribe.");
+  if (!result.notes.length) {
+    throw new Error("YourMT3 did not produce any musical notes for this recording.");
   }
 
   return {
-    notes: cleanTranscribedNotes(notes),
-    duration: originalDuration,
-    stemCounts,
-    tempo: detectedTempo
+    ...result,
+    duration: originalDuration
   };
 }
 
@@ -801,7 +869,7 @@ async function handleAudio(file) {
   fileInfo.classList.remove("hidden");
   fileInfo.textContent = file.name + " · " + (file.size / 1048576).toFixed(2) + " MB";
   panel.classList.remove("hidden");
-  setStatus("Separating stems…");
+  setStatus("Transcribing all instruments…");
 
   try {
     transcription = await transcribeAudio(file);
@@ -809,7 +877,7 @@ async function handleAudio(file) {
     arrangeButton.disabled = false;
     originalDownloadButton.disabled = false;
     setProgress(100, "Separation and transcription complete");
-    setStatus(transcription.notes.length + " notes from separated stems");
+    setStatus(transcription.notes.length + " notes from YourMT3 multi-instrument transcription");
     setTimeout(hideProgress, 900);
   } catch (error) {
     console.error(error);
