@@ -45,13 +45,13 @@ jobs:
               raise SystemExit("Expected YourMT3 MoE empty-expert guard was not found")
           s = s.replace(old_guard, new_guard, 1)
 
-          old_indexing = "\n".join([
+          old_indexing = chr(10).join([
               "top_x_list = top_x.tolist()",
               "idx_list = idx.tolist()",
               "",
               "# Index the correct hidden states and compute the expert hidden state for",
           ])
-          new_indexing = "\n".join([
+          new_indexing = chr(10).join([
               "# Keep expert routing indices as tensors. Python .tolist() creates",
               "# data-dependent values that torch.export cannot specialize.",
               "top_x_list = top_x",
