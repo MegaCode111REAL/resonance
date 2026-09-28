@@ -1,6 +1,7 @@
 """Patch official YourMT3 MoE routing so torch.export can trace it."""
 
 from pathlib import Path
+import re
 
 TARGET = Path(".build/YourMT3/amt/src/model/ff_layer.py")
 
@@ -17,24 +18,29 @@ def main() -> None:
         raise SystemExit("Expected YourMT3 MoE empty-expert guard was not found")
     text = text.replace(old_guard, new_guard, 1)
 
-    old_top_x = "top_x_list = top_x.tolist()"
-    old_idx = "idx_list = idx.tolist()"
-    if old_top_x not in text or old_idx not in text:
+    pattern = re.compile(
+        r"^(?P<indent>[ \t]*)top_x_list = top_x\.tolist\(\)\r?\n"
+        r"(?P=indent)idx_list = idx\.tolist\(\)",
+        re.MULTILINE,
+    )
+    match = pattern.search(text)
+    if not match:
         raise SystemExit(
             "Expected YourMT3 MoE Python-list indexing lines were not found"
         )
 
-    text = text.replace(
-        old_top_x,
-        "# Keep expert routing indices as tensors. Python .tolist() creates\n"
-        "# data-dependent values that torch.export cannot specialize.\n"
-        "top_x_list = top_x",
-        1,
+    indent = match.group("indent")
+    replacement = (
+        f"{indent}# Keep expert routing indices as tensors. Python .tolist() "
+        "creates data-dependent values that torch.export cannot specialize.\n"
+        f"{indent}top_x_list = top_x\n"
+        f"{indent}idx_list = idx"
     )
-    text = text.replace(old_idx, "idx_list = idx", 1)
+    text = pattern.sub(replacement, text, count=1)
 
     TARGET.write_text(text)
-    print(f"Patched {TARGET}")
+    compile(TARGET.read_text(), str(TARGET), "exec")
+    print(f"Patched and syntax-checked {TARGET}")
 
 
 if __name__ == "__main__":
