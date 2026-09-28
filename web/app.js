@@ -455,27 +455,31 @@ function buildOriginalMidi(notes, tempo = detectedTempo) {
   const midi = new Midi();
   midi.header.setTempo(tempo);
 
-  const stems = ["vocals", "bass", "other"];
-  const labels = {
-    vocals: "Vocals",
-    bass: "Bass",
-    other: "Other"
-  };
+  const groups = new Map();
+  for (const note of notes) {
+    const key = note.isDrum ? "drums" : String(note.program ?? 0);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: note.isDrum ? "Drums" : gmProgramName(note.program ?? 0),
+        program: note.isDrum ? 0 : note.program ?? 0,
+        isDrum: Boolean(note.isDrum),
+        notes: []
+      });
+    }
+    groups.get(key).notes.push(note);
+  }
 
-  for (const stem of stems) {
-    const trackNotes = notes.filter(note => note.stem === stem);
-    if (!trackNotes.length) continue;
-
+  for (const part of groups.values()) {
     const track = midi.addTrack();
-    track.name = labels[stem] + " (Unarranged)";
-    track.channel = midi.tracks.length - 1;
-    track.instrument.number = stem === "bass" ? 33 : 0;
+    track.name = part.name + " (YourMT3)";
+    track.channel = midi.tracks.length === 10 ? 9 : (midi.tracks.length - 1) % 16;
+    track.instrument.number = part.program;
 
-    for (const note of trackNotes) {
+    for (const note of part.notes) {
       track.addNote({
         midi: note.midi,
         time: note.time,
-        duration: Math.max(0.05, note.duration),
+        duration: Math.max(0.025, note.duration),
         velocity: Math.max(0.08, Math.min(1, note.velocity ?? 0.75))
       });
     }
