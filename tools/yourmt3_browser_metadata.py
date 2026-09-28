@@ -1,30 +1,43 @@
-"""Tiny browser-facing decoder specification.
-
-The neural model is intentionally kept in ONNX Runtime Web. This module is
-used by the build tooling to emit the stable model metadata consumed by the
-browser. Musical token decoding remains deterministic and versioned alongside
-the exact YourMT3 configuration.
-"""
-
+"""Emit the exact YourMT3 token/event mapping for the browser decoder."""
 from __future__ import annotations
-
-import json
+import json, sys
 from pathlib import Path
 
-
-def write_metadata(path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "model": "YPTF.MoE+Multi (noPS)",
-                "task": "mc13_full_plus_256",
-                "channels": 13,
-                "sample_rate": 16000,
-                "segment_samples": 32767,
-                "max_note_tokens_per_channel": 256,
-                "vocab_size": 596,
-            },
-            indent=2,
-        ) + "\n",
-        encoding="utf-8",
+def main() -> None:
+    root = Path(".build/YourMT3")
+    sys.path.insert(0, str(root / "amt" / "src"))
+    from config.vocabulary import program_vocab_presets
+    from utils.task_manager import TaskManager
+    from utils.tokenizer import EventTokenizer
+    task = TaskManager(task_name="mc13_full_plus_256")
+    tokenizer = EventTokenizer()
+    events = []
+    for token_id in range(task.num_tokens):
+        try:
+            decoded = tokenizer.decode([token_id])
+            event = decoded[0] if decoded else None
+            events.append({
+                "id": token_id,
+                "type": getattr(event, "type", None),
+                "value": getattr(event, "value", None),
+            })
+        except Exception:
+            events.append({"id": token_id, "type": None, "value": None})
+    payload = {
+        "model": "YPTF.MoE+Multi (noPS)",
+        "task": "mc13_full_plus_256",
+        "num_tokens": task.num_tokens,
+        "channels": task.num_decoding_channels,
+        "events": events,
+        "program_vocab": {
+            str(program): list(programs)
+            for program, programs in program_vocab_presets["mt3_full_plus"].items()
+        },
+    }
+    Path("dist").mkdir(exist_ok=True)
+    Path("dist/yourmt3-vocab.json").write_text(
+        json.dumps(payload, separators=(",", ":")), encoding="utf-8"
     )
+
+if __name__ == "__main__":
+    main()
