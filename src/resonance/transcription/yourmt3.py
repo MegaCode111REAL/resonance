@@ -110,13 +110,13 @@ class YourMT3Transcriber:
         return [
             self.python,
             "-m",
-            "yourmt3_runtime",
+            "resonance.transcription.yourmt3_runtime",
             "--audio",
             values["audio"],
             "--output",
             values["output"],
             "--checkpoint",
-            values["checkpoint"],
+            self.checkpoint.name,
         ]
 
     @staticmethod
