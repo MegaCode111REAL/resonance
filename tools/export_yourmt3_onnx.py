@@ -10,6 +10,7 @@ neural network entirely in the browser.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
