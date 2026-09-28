@@ -52,6 +52,9 @@ class YourMT3Transcriber:
         audio_path = Path(audio_path)
         if not audio_path.is_file():
             raise FileNotFoundError(audio_path)
+        if not self.root and not self.command:
+            return self._transcribe_with_mt3_infer(audio_path)
+
         self._validate_runtime()
 
         with tempfile.TemporaryDirectory(prefix="resonance-yourmt3-") as tmp:
@@ -74,6 +77,27 @@ class YourMT3Transcriber:
                     "YourMT3 completed without producing the expected MIDI output."
                 )
             return self._read_midi(output)
+
+    @staticmethod
+    def _transcribe_with_mt3_infer(audio_path: Path) -> MultiInstrumentTranscription:
+        """Use the maintained MT3-Infer wrapper when no local checkout is configured."""
+        try:
+            from mt3_infer import transcribe as mt3_transcribe
+        except ImportError as exc:
+            raise YourMT3Error(
+                "No YourMT3 runtime is installed. Install the optional "
+                "Resonance YourMT3 dependencies or set YOURMT3_ROOT."
+            ) from exc
+
+        try:
+            midi = mt3_transcribe(str(audio_path), model="yourmt3")
+        except Exception as exc:
+            raise YourMT3Error(f"MT3-Infer YourMT3 transcription failed: {exc}") from exc
+
+        with tempfile.TemporaryDirectory(prefix="resonance-yourmt3-") as tmp:
+            output = Path(tmp) / "transcription.mid"
+            midi.save(str(output))
+            return YourMT3Transcriber._read_midi(output)
 
     def _validate_runtime(self) -> None:
         if not self.root:
