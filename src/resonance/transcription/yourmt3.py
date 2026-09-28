@@ -39,7 +39,10 @@ class YourMT3Transcriber:
         python: str | None = None,
         command: str | None = None,
     ) -> None:
-        self.root = Path(root or os.environ.get("YOURMT3_ROOT", "")).expanduser()
+        env_root = os.environ.get("YOURMT3_ROOT")
+        self.root = Path(root).expanduser() if root else (
+            Path(env_root).expanduser() if env_root else None
+        )
         self.checkpoint = (
             Path(checkpoint).expanduser()
             if checkpoint
@@ -104,6 +107,8 @@ class YourMT3Transcriber:
             raise YourMT3Error(
                 "YOURMT3_ROOT is not set. Point it at a YourMT3 runtime checkout."
             )
+        if self.root is None:
+            raise YourMT3Error("YourMT3 root is not configured.")
         if not self.root.is_dir():
             raise YourMT3Error(f"YourMT3 root does not exist: {self.root}")
         # The official YourMT3 loader can download/cache the checkpoint by name.
