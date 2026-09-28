@@ -36,7 +36,7 @@ def main() -> None:
     }
     Path("dist").mkdir(exist_ok=True)
     Path("dist/yourmt3-vocab.json").write_text(
-        json.dumps(payload, separators=(",", ":")), encoding="utf-8"
+        json.dumps(payload, separators=(",", ":"), default=int), encoding="utf-8"
     )
 
 if __name__ == "__main__":
