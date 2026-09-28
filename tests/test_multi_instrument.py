@@ -97,3 +97,36 @@ def test_yourmt3_midi_output_becomes_independent_parts(tmp_path: Path):
     assert result.parts[0].notes[0].pitch == 60
     assert result.parts[1].notes[0].pitch == 36
     assert result.parts[0].notes[0].end > result.parts[0].notes[0].start
+
+
+def test_yourmt3_adapter_defaults_to_public_model_name():
+    transcriber = YourMT3Transcriber()
+    assert transcriber.model == "yourmt3"
+    assert transcriber.device == "auto"
+    assert transcriber.adaptive is False
+
+
+def test_yourmt3_midi_conversion_preserves_separate_same_instrument_tracks(tmp_path: Path):
+    midi = mido.MidiFile(ticks_per_beat=480)
+
+    first = mido.MidiTrack()
+    first.append(mido.MetaMessage("track_name", name="Guitar Lead"))
+    first.append(mido.Message("program_change", program=24, time=0))
+    first.append(mido.Message("note_on", note=64, velocity=100, time=0))
+    first.append(mido.Message("note_off", note=64, velocity=0, time=240))
+
+    second = mido.MidiTrack()
+    second.append(mido.MetaMessage("track_name", name="Guitar Harmony"))
+    second.append(mido.Message("program_change", program=24, time=0))
+    second.append(mido.Message("note_on", note=52, velocity=90, time=0))
+    second.append(mido.Message("note_off", note=52, velocity=0, time=240))
+
+    midi.tracks.extend([first, second])
+    path = tmp_path / "same-instrument.mid"
+    midi.save(path)
+
+    result = YourMT3Transcriber._midi_to_transcription(mido.MidiFile(path))
+
+    assert len(result.parts) == 2
+    assert [part.name for part in result.parts] == ["Guitar Lead", "Guitar Harmony"]
+    assert [part.notes[0].pitch for part in result.parts] == [64, 52]
