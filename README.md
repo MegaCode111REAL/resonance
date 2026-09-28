@@ -139,6 +139,36 @@ Future Resonance models will work toward:
 - vocal melody transcription
 - lyrics transcription
 
+
+
+### Multi-instrument transcription branch
+
+The `feature/yourmt3-transcription` branch adds a real multi-track transcription backend based on YourMT3+. Unlike the earlier fixed stem pipeline, the model can emit independent instrument tracks rather than forcing everything into vocals/bass/other. The upstream YourMT3+ project documents a multi-instrument, multi-track model, and the maintained MT3-Infer wrapper exposes it as the `yourmt3` backend. citeturn0search4turn1search0
+
+Install the optional backend:
+
+~~~bash
+python -m pip install -e ".[yourmt3]"
+~~~
+
+Then:
+
+~~~bash
+resonance transcribe song.wav --backend yourmt3 --output output/song.mid
+~~~
+
+The first YourMT3 run downloads/caches its model checkpoint through the MT3-Infer backend. The checkpoint is roughly 536 MB according to the current MT3-Infer model table. citeturn1search0
+
+For development against the official YourMT3 checkout instead, set:
+
+~~~bash
+export YOURMT3_ROOT=/path/to/YourMT3
+~~~
+
+The branch also contains a small Resonance runtime bridge for the official model implementation. It keeps the model implementation and weights outside the Resonance repository rather than copying the upstream research code into the project.
+
+The browser version is intentionally **not** switched to this backend yet. YourMT3 is an autoregressive PyTorch model, and the current MT3-Infer project explicitly does not provide an ONNX export. citeturn1search0 The next browser step is therefore a dedicated browser-runtime conversion rather than pretending the Python backend can run on GitHub Pages.
+
 ### Arrangement
 
 The final arranger will learn from MIDI arrangements and will be conditioned on:
